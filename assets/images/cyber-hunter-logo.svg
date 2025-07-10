@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 768 768" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="dragonGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00D8FF;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#22D3EE;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#06B6D4;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Dragon head and body -->
+  <path d="M200 400 Q250 300 350 280 Q450 260 500 300 Q550 340 580 400 Q600 450 590 500 Q580 550 550 580 Q500 620 450 640 Q400 660 350 650 Q300 640 250 600 Q200 560 180 500 Q160 440 200 400 Z" fill="url(#dragonGradient)" stroke="#000" stroke-width="3"/>
+  
+  <!-- Dragon spikes -->
+  <path d="M300 280 L310 250 L320 280 M350 270 L365 240 L380 270 M420 275 L435 245 L450 275" fill="url(#dragonGradient)" stroke="#000" stroke-width="2"/>
+  
+  <!-- Dragon eye -->
+  <circle cx="450" cy="350" r="8" fill="#FF4444"/>
+  
+  <!-- Dragon horn/beak -->
+  <path d="M550 350 Q600 330 630 360 Q640 380 620 400 Q590 410 550 390" fill="url(#dragonGradient)" stroke="#000" stroke-width="2"/>
+  
+  <!-- Wave/water element -->
+  <path d="M100 600 Q200 580 300 600 Q400 620 500 600 Q600 580 700 600 Q750 610 700 630 Q600 650 500 630 Q400 610 300 630 Q200 650 100 630 Z" fill="url(#dragonGradient)" opacity="0.7"/>
+</svg>
