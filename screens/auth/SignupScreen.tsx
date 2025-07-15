@@ -1,3 +1,4 @@
+import { API_URL } from '@/constants/url';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { BlurView } from 'expo-blur';
@@ -28,10 +29,8 @@ import { ThemedText } from '../../components/ThemedText';
 import { ThemedView } from '../../components/ThemedView';
 import CyberButton from '../../components/ui/CyberButton';
 import { AuthContext } from '../../context/AuthContext';
-import logo from '../../assets/images/icon.png'; // Adjust the path as necessary
 
 const { width, height } = Dimensions.get('window');
-const API_URL = 'https://0023edba1c90.ngrok-free.app/api/v1';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
@@ -54,7 +53,7 @@ export default function SignupScreen() {
 
     try {
       setLoading(true);
-      const response = await axios.post(`${API_URL}/auth/signup`, {
+      const response = await axios.post(`${API_URL}/api/v1/auth/signup`, {
         email,
         password,
         confirmPassword,
@@ -76,14 +75,14 @@ export default function SignupScreen() {
     try {
       setSocialLoading('google');
       const result = await WebBrowser.openAuthSessionAsync(
-        `${API_URL}/auth/google`,
+        `${API_URL}/api/v1/auth/google`,
         'cyberhunter://redirect'
       );
 
       if (result.type === 'success') {
         const url = new URL(result.url);
         const code = url.searchParams.get('code');
-        const response = await axios.get(`${API_URL}/auth/google?code=${code}`);
+        const response = await axios.get(`${API_URL}/api/v1/auth/google?code=${code}`);
         await signIn(response.data.data);
         router.replace('/(tabs)');
       }
@@ -103,12 +102,12 @@ export default function SignupScreen() {
     try {
       setSocialLoading('github');
       const result = await WebBrowser.openAuthSessionAsync(
-        `${API_URL}/auth/github`,
+        `${API_URL}/api/v1/auth/github`,
         'cyberhunter://redirect'
       );
 
       if (result.type === 'success') {
-        const response = await axios.get(`${API_URL}/auth/github/callback${result.url.split('callback')[1]}`);
+        const response = await axios.get(`${API_URL}/api/v1/auth/github/callback${result.url.split('callback')[1]}`);
         await signIn(response.data.data);
         router.replace('/(tabs)');
       }
@@ -128,12 +127,12 @@ export default function SignupScreen() {
     try {
       setSocialLoading('metamask');
       const result = await WebBrowser.openAuthSessionAsync(
-        `${API_URL}/auth/wallet/connect`,
+        `${API_URL}/api/v1/auth/wallet/connect`,
         'cyberhunter://redirect'
       );
 
       if (result.type === 'success') {
-        const response = await axios.get(`${API_URL}/auth/wallet/callback${result.url.split('callback')[1]}`);
+        const response = await axios.get(`${API_URL}/api/v1/auth/wallet/callback${result.url.split('callback')[1]}`);
         await signIn(response.data.data);
         router.replace('/(tabs)');
       }

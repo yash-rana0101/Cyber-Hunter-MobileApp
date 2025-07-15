@@ -10,8 +10,6 @@ export default function RootIndex() {
 
   useEffect(() => {
     if (loading) return; // Wait for auth check to complete
-
-    console.log('RootIndex - isAuthenticated:', isAuthenticated);
     
     if (isAuthenticated) {
       console.log('Redirecting to dashboard');

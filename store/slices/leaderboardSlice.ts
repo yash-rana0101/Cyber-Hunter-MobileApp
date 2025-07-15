@@ -1,63 +1,31 @@
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
+import {
+  LeaderboardFilters,
+  LeaderboardParams,
+  LeaderboardResponse,
+  leaderboardService
+} from '../../services/leaderboard';
 
-// Types
-export interface LeaderboardUser {
-  id: string;
-  username: string;
-  avatar?: string;
-  score: number;
-  rank: number;
-  projectsCount: number;
-  teamsCount: number;
-  achievementsCount: number;
-  change: number; // Position change from last period
-  badges: string[];
-}
-
-export interface LeaderboardTeam {
-  id: string;
-  name: string;
-  avatar?: string;
-  score: number;
-  rank: number;
-  memberCount: number;
-  projectsCount: number;
-  change: number;
-  ownerId: string;
-  ownerName: string;
-}
-
-export interface LeaderboardFilter {
-  type: 'users' | 'teams';
-  period: 'weekly' | 'monthly' | 'yearly' | 'all-time';
-  techStack?: string[];
-  language?: string;
-  category?: string;
-}
-
+// Redux state interface
 export interface LeaderboardState {
-  users: LeaderboardUser[];
-  teams: LeaderboardTeam[];
-  myRank: {
-    user?: number;
-    team?: number;
-  };
+  data: LeaderboardResponse | null;
+  filters: LeaderboardFilters | null;
   isLoading: boolean;
   error: string | null;
-  filter: LeaderboardFilter;
+  params: LeaderboardParams;
   lastUpdated: string | null;
 }
 
 // Initial state
 const initialState: LeaderboardState = {
-  users: [],
-  teams: [],
-  myRank: {},
+  data: null,
+  filters: null,
   isLoading: false,
   error: null,
-  filter: {
-    type: 'users',
-    period: 'all-time',
+  params: {
+    type: 'individual',
+    page: 1,
+    limit: 20,
   },
   lastUpdated: null,
 };
@@ -65,171 +33,111 @@ const initialState: LeaderboardState = {
 // Async thunks
 export const fetchLeaderboard = createAsyncThunk(
   'leaderboard/fetchLeaderboard',
-  async (filter: LeaderboardFilter) => {
-    const params = new URLSearchParams({
-      type: filter.type,
-      period: filter.period,
-    });
-    
-    if (filter.techStack) {
-      filter.techStack.forEach(tech => params.append('techStack', tech));
+  async (params: LeaderboardParams, { rejectWithValue }) => {
+    try {
+      const response = await leaderboardService.getLeaderboard(params);
+      return response;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch leaderboard');
     }
-    if (filter.language) params.append('language', filter.language);
-    if (filter.category) params.append('category', filter.category);
-    
-    const response = await fetch(`/api/leaderboard?${params}`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch leaderboard');
-    }
-    
-    const data = await response.json();
-    return { ...data, filter };
   }
 );
 
-export const fetchUserRank = createAsyncThunk(
-  'leaderboard/fetchUserRank',
-  async (userId: string) => {
-    const response = await fetch(`/api/leaderboard/user/${userId}/rank`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch user rank');
+export const fetchLeaderboardFilters = createAsyncThunk(
+  'leaderboard/fetchFilters',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await leaderboardService.getFilters();
+      return response;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch filters');
     }
-    return await response.json();
   }
 );
 
-export const fetchTeamRank = createAsyncThunk(
-  'leaderboard/fetchTeamRank',
-  async (teamId: string) => {
-    const response = await fetch(`/api/leaderboard/team/${teamId}/rank`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch team rank');
+export const refreshLeaderboard = createAsyncThunk(
+  'leaderboard/refreshLeaderboard',
+  async (_, { rejectWithValue }) => {
+    try {
+      await leaderboardService.refreshLeaderboard();
+      return true;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to refresh leaderboard');
     }
-    return await response.json();
   }
 );
 
-export const fetchTopPerformers = createAsyncThunk(
-  'leaderboard/fetchTopPerformers',
-  async ({ period = 'weekly', limit = 10 }: { period?: string; limit?: number } = {}) => {
-    const response = await fetch(`/api/leaderboard/top?period=${period}&limit=${limit}`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch top performers');
-    }
-    return await response.json();
-  }
-);
-
-export const fetchScoreHistory = createAsyncThunk(
-  'leaderboard/fetchScoreHistory',
-  async ({ userId, period = '30d' }: { userId: string; period?: string }) => {
-    const response = await fetch(`/api/leaderboard/user/${userId}/history?period=${period}`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch score history');
-    }
-    return await response.json();
-  }
-);
-
-export const fetchLeaderboardStats = createAsyncThunk(
-  'leaderboard/fetchStats',
-  async () => {
-    const response = await fetch('/api/leaderboard/stats');
-    if (!response.ok) {
-      throw new Error('Failed to fetch leaderboard stats');
-    }
-    return await response.json();
-  }
-);
-
-// Leaderboard slice
+// Slice
 const leaderboardSlice = createSlice({
   name: 'leaderboard',
   initialState,
   reducers: {
+    setParams: (state, action: PayloadAction<Partial<LeaderboardParams>>) => {
+      state.params = { ...state.params, ...action.payload };
+    },
     clearError: (state) => {
       state.error = null;
     },
-    setFilter: (state, action: PayloadAction<Partial<LeaderboardFilter>>) => {
-      state.filter = { ...state.filter, ...action.payload };
-    },
-    updateUserScore: (state, action: PayloadAction<{ userId: string; newScore: number }>) => {
-      const user = state.users.find(u => u.id === action.payload.userId);
-      if (user) {
-        user.score = action.payload.newScore;
-        // Re-sort users by score
-        state.users.sort((a, b) => b.score - a.score);
-        // Update ranks
-        state.users.forEach((user, index) => {
-          user.rank = index + 1;
-        });
-      }
-    },
-    updateTeamScore: (state, action: PayloadAction<{ teamId: string; newScore: number }>) => {
-      const team = state.teams.find(t => t.id === action.payload.teamId);
-      if (team) {
-        team.score = action.payload.newScore;
-        // Re-sort teams by score
-        state.teams.sort((a, b) => b.score - a.score);
-        // Update ranks
-        state.teams.forEach((team, index) => {
-          team.rank = index + 1;
-        });
-      }
+    resetLeaderboard: (state) => {
+      state.data = null;
+      state.error = null;
+      state.params = initialState.params;
     },
   },
   extraReducers: (builder) => {
+    // Fetch leaderboard
     builder
-      // Fetch leaderboard
       .addCase(fetchLeaderboard.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
       .addCase(fetchLeaderboard.fulfilled, (state, action) => {
         state.isLoading = false;
-        if (action.payload.filter.type === 'users') {
-          state.users = action.payload.data;
-        } else {
-          state.teams = action.payload.data;
-        }
-        state.filter = action.payload.filter;
+        state.data = action.payload;
         state.lastUpdated = new Date().toISOString();
       })
       .addCase(fetchLeaderboard.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.error.message || 'Failed to fetch leaderboard';
+        state.error = action.payload as string;
+      });
+
+    // Fetch filters
+    builder
+      .addCase(fetchLeaderboardFilters.pending, (state) => {
+        // Don't set loading for filters as it's usually fetched alongside main data
       })
-      // Fetch user rank
-      .addCase(fetchUserRank.fulfilled, (state, action) => {
-        state.myRank.user = action.payload.rank;
+      .addCase(fetchLeaderboardFilters.fulfilled, (state, action) => {
+        state.filters = action.payload;
       })
-      // Fetch team rank
-      .addCase(fetchTeamRank.fulfilled, (state, action) => {
-        state.myRank.team = action.payload.rank;
+      .addCase(fetchLeaderboardFilters.rejected, (state, action) => {
+        // Don't set error for filters as it's not critical
+        console.error('Failed to fetch leaderboard filters:', action.payload);
+      });
+
+    // Refresh leaderboard
+    builder
+      .addCase(refreshLeaderboard.pending, (state) => {
+        // Don't set loading for refresh as it's an admin action
       })
-      // Fetch top performers
-      .addCase(fetchTopPerformers.fulfilled, (state, action) => {
-        // This could be used to highlight top performers in the UI
-        // For now, we just store the current leaderboard data
+      .addCase(refreshLeaderboard.fulfilled, (state) => {
+        // Refresh successful, could trigger a re-fetch
       })
-      // Fetch score history
-      .addCase(fetchScoreHistory.fulfilled, (state, action) => {
-        // This data would be used for charts/graphs
-        // Store in a separate property if needed for analytics
-      })
-      // Fetch stats
-      .addCase(fetchLeaderboardStats.fulfilled, (state, action) => {
-        // Store global stats for dashboard
-        // Could include total users, total teams, average scores, etc.
+      .addCase(refreshLeaderboard.rejected, (state, action) => {
+        state.error = action.payload as string;
       });
   },
 });
 
-export const { 
-  clearError, 
-  setFilter, 
-  updateUserScore, 
-  updateTeamScore 
-} = leaderboardSlice.actions;
+// Export actions
+export const { setParams, clearError, resetLeaderboard } = leaderboardSlice.actions;
 
+// Export selectors
+export const selectLeaderboardData = (state: { leaderboard: LeaderboardState }) => state.leaderboard.data;
+export const selectLeaderboardFilters = (state: { leaderboard: LeaderboardState }) => state.leaderboard.filters;
+export const selectLeaderboardLoading = (state: { leaderboard: LeaderboardState }) => state.leaderboard.isLoading;
+export const selectLeaderboardError = (state: { leaderboard: LeaderboardState }) => state.leaderboard.error;
+export const selectLeaderboardParams = (state: { leaderboard: LeaderboardState }) => state.leaderboard.params;
+export const selectLeaderboardLastUpdated = (state: { leaderboard: LeaderboardState }) => state.leaderboard.lastUpdated;
+
+// Export reducer
 export default leaderboardSlice.reducer;

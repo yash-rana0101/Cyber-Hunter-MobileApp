@@ -1,11 +1,20 @@
-import UserProfileAvatar from '@/components/ui/UserProfileAvatar';
+import MainScreenHeader from '@/components/ui/MainScreenHeader';
+import { useAuth } from '@/context/AuthContext';
+import { projectService } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  Animated,
   Dimensions,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -16,297 +25,443 @@ import {
 const { width } = Dimensions.get('window');
 
 interface Project {
-  id: number;
-  title: string;
-  description: string;
-  status: 'active' | 'completed' | 'paused' | 'planning';
-  progress: number;
-  team: string;
-  dueDate: string;
-  priority: 'high' | 'medium' | 'low';
-  tags: string[];
+  _id: string;
+  projectName: string;
+  projectDescription: string;
+  projectThumbnail: string;
+  projectImage: string[];
+  gitHubLink: string;
+  liveLink?: string;
+  techStack: any[];
+  language: any[];
+  tagId: any[];
+  rating: number;
+  point: number;
+  totalPoint: number;
+  like: string[];
+  status: 'pending' | 'active';
+  createdAt: string;
+  updatedAt: string;
+  userId?: string;
+  teamId?: string;
 }
 
-const ProjectsScreen: React.FC = () => {
+interface ProjectStats {
+  total: number;
+  active: number;
+  pending: number;
+  thisMonth: number;
+}
+
+const ProjectsScreenNew: React.FC = () => {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'pending'>('all');
+  const [stats, setStats] = useState<ProjectStats>({ total: 0, active: 0, pending: 0, thisMonth: 0 });
+  
+  const { user } = useAuth();
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
-  const projectsData: Project[] = [
-    {
-      id: 1,
-      title: 'Network Security Audit',
-      description: 'Comprehensive security assessment of corporate network infrastructure',
-      status: 'active',
-      progress: 75,
-      team: 'Security Team Alpha',
-      dueDate: '2025-07-20',
-      priority: 'high',
-      tags: ['Security', 'Network', 'Audit'],
-    },
-    {
-      id: 2,
-      title: 'Vulnerability Scanner',
-      description: 'Automated tool for detecting system vulnerabilities',
-      status: 'completed',
-      progress: 100,
-      team: 'Dev Team Beta',
-      dueDate: '2025-07-01',
-      priority: 'medium',
-      tags: ['Development', 'Security', 'Automation'],
-    },
-    {
-      id: 3,
-      title: 'Incident Response System',
-      description: 'Real-time incident detection and response platform',
-      status: 'active',
-      progress: 45,
-      team: 'Response Team Gamma',
-      dueDate: '2025-08-15',
-      priority: 'high',
-      tags: ['Incident', 'Response', 'Platform'],
-    },
-    {
-      id: 4,
-      title: 'Encryption Protocol',
-      description: 'Advanced encryption implementation for secure communications',
-      status: 'planning',
-      progress: 10,
-      team: 'Crypto Team Delta',
-      dueDate: '2025-09-01',
-      priority: 'medium',
-      tags: ['Encryption', 'Security', 'Protocol'],
-    },
-    {
-      id: 5,
-      title: 'Penetration Testing',
-      description: 'Comprehensive penetration testing of web applications',
-      status: 'paused',
-      progress: 30,
-      team: 'Pentest Team Epsilon',
-      dueDate: '2025-08-30',
-      priority: 'low',
-      tags: ['Pentest', 'Web', 'Security'],
-    },
-  ];
+  useEffect(() => {
+    loadProjects();
+    animateEntrance();
+  }, []);
 
-  const stats = [
-    { label: 'Total Projects', value: projectsData.length.toString(), icon: 'folder' },
-    { label: 'Active', value: projectsData.filter(p => p.status === 'active').length.toString(), icon: 'play-circle' },
-    { label: 'Completed', value: projectsData.filter(p => p.status === 'completed').length.toString(), icon: 'checkmark-circle' },
-    { label: 'This Month', value: '3', icon: 'calendar' },
-  ];
+  const animateEntrance = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return '#10B981';
-      case 'completed': return '#22d3ee';
-      case 'paused': return '#F59E0B';
-      case 'planning': return '#8B5CF6';
-      default: return '#9CA3AF';
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      const response = await projectService.getProjects();
+      const projectsData = Array.isArray(response) ? response : response.data || [];
+      setProjects(projectsData);
+      calculateStats(projectsData);
+    } catch (error) {
+      console.error('Error loading projects:', error);
+      Alert.alert('Error', 'Failed to load projects. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return '#EF4444';
-      case 'medium': return '#F59E0B';
-      case 'low': return '#10B981';
-      default: return '#9CA3AF';
-    }
+  const calculateStats = (projectsData: Project[]) => {
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    
+    const stats = {
+      total: projectsData.length,
+      active: projectsData.filter(p => p.status === 'active').length,
+      pending: projectsData.filter(p => p.status === 'pending').length,
+      thisMonth: projectsData.filter(p => {
+        const projectDate = new Date(p.createdAt);
+        return projectDate.getMonth() === currentMonth && projectDate.getFullYear() === currentYear;
+      }).length,
+    };
+    
+    setStats(stats);
   };
 
-  const renderFloatingOrbs = () => (
-    <>
-      <View style={[styles.floatingOrb, styles.orb1]} />
-      <View style={[styles.floatingOrb, styles.orb2]} />
-      <View style={[styles.floatingOrb, styles.orb3]} />
-    </>
-  );
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadProjects();
+    setRefreshing(false);
+  };
 
-  const renderStatCard = (stat: any, index: number) => (
-    <View key={index} style={styles.statCard}>
-      <View style={styles.statIconContainer}>
-        <Ionicons name={stat.icon as any} size={20} color="#22d3ee" />
-      </View>
-      <Text style={styles.statLabel}>{stat.label}</Text>
-      <Text style={styles.statValue}>{stat.value}</Text>
-    </View>
-  );
+  const handleCreateProject = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push('/create-project');
+  };
 
-  const renderProjectCard = (project: Project) => (
-    <TouchableOpacity 
-      key={project.id} 
-      style={styles.projectCard}
-      onPress={() => {
-        // Navigate to ViewProjectScreen - you can pass project data as params
-        router.push({
-          pathname: '/view-project',
-          params: { projectId: project.id.toString() }
-        });
-      }}
-    >
-      <View style={styles.projectHeader}>
-        <View style={styles.projectTitleContainer}>
-          <Text style={styles.projectTitle}>{project.title}</Text>
-          <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(project.priority) + '40' }]}>
-            <Text style={[styles.priorityText, { color: getPriorityColor(project.priority) }]}>
-              {project.priority.toUpperCase()}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.projectActions}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="create" size={16} color="#22d3ee" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="trash" size={16} color="#EF4444" />
-          </TouchableOpacity>
-        </View>
-      </View>
+  const handleProjectPress = (project: Project) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({
+      pathname: '/view-project',
+      params: { projectId: project._id }
+    });
+  };
 
-      <Text style={styles.projectDescription}>{project.description}</Text>
+  const handleDeleteProject = async (projectId: string) => {
+    Alert.alert(
+      'Delete Project',
+      'Are you sure you want to delete this project?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await projectService.deleteProject(projectId);
+              loadProjects();
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (error) {
+              console.error('Error deleting project:', error);
+              Alert.alert('Error', 'Failed to delete project');
+            }
+          }
+        }
+      ]
+    );
+  };
 
-      <View style={styles.projectMeta}>
-        <Text style={styles.teamText}>{project.team}</Text>
-        <Text style={styles.dueDateText}>Due: {new Date(project.dueDate).toLocaleDateString()}</Text>
-      </View>
-
-      <View style={styles.progressContainer}>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${project.progress}%` }]} />
-        </View>
-        <Text style={styles.progressText}>{project.progress}%</Text>
-      </View>
-
-      <View style={styles.projectFooter}>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(project.status) + '40' }]}>
-          <Text style={[styles.statusText, { color: getStatusColor(project.status) }]}>
-            {project.status.toUpperCase()}
-          </Text>
-        </View>
-        <View style={styles.tagsContainer}>
-          {project.tags.slice(0, 2).map((tag, index) => (
-            <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>{tag}</Text>
-            </View>
-          ))}
-          {project.tags.length > 2 && (
-            <Text style={styles.moreTagsText}>+{project.tags.length - 2}</Text>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const filteredProjects = projectsData.filter(project => {
-    const matchesSearch = project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         project.description.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredProjects = projects.filter(project => {
+    const matchesSearch = project.projectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         project.projectDescription.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filterStatus === 'all' || project.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
 
-  return (
-    <SafeAreaView style={styles.container}>
-      {renderFloatingOrbs()}
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-        <View style={styles.headerTop}>
-            <UserProfileAvatar size="medium" />
-            
-            <TouchableOpacity 
-              style={styles.notificationButton}
-              onPress={() => router.push('/notifications')}
-            >
-              <Ionicons name="notifications" size={24} color="#22d3ee" />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>3</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>PROJECTS</Text>
-            <Text style={styles.subtitle}>Your cybersecurity projects</Text>
-          </View>
-        </View>
+  const renderFloatingOrbs = () => (
+    <>
+      <Animated.View style={[styles.floatingOrb, styles.orb1, { opacity: fadeAnim }]} />
+      <Animated.View style={[styles.floatingOrb, styles.orb2, { opacity: fadeAnim }]} />
+      <Animated.View style={[styles.floatingOrb, styles.orb3, { opacity: fadeAnim }]} />
+    </>
+  );
 
-        {/* Stats Grid */}
-        <View style={styles.statsContainer}>
-          {stats.map((stat, index) => renderStatCard(stat, index))}
-        </View>
+  const renderHeader = () => (
+    <MainScreenHeader
+      title="My Projects"
+      subtitle="Manage and track your progress"
+      fadeAnim={fadeAnim}
+      slideAnim={slideAnim}
+    />
+  );
 
-        {/* Search and Filter */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
-            <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search projects..."
-              placeholderTextColor="#9CA3AF"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
-          <TouchableOpacity style={styles.filterButton}>
-            <Ionicons name="filter" size={20} color="#22d3ee" />
-          </TouchableOpacity>
+  const renderStatsCard = (label: string, value: string, icon: string, color: string, index: number) => (
+    <Animated.View
+      key={label}
+      style={[
+        styles.statCard,
+        {
+          opacity: fadeAnim,
+          transform: [
+            { translateY: slideAnim },
+            { scale: scaleAnim }
+          ]
+        }
+      ]}
+    >
+      <LinearGradient
+        colors={[`${color}20`, `${color}10`]}
+        style={styles.statGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <View style={[styles.statIconContainer, { backgroundColor: `${color}30` }]}>
+          <Ionicons name={icon as any} size={24} color={color} />
         </View>
+        <Text style={styles.statLabel}>{label}</Text>
+        <Text style={[styles.statValue, { color }]}>{value}</Text>
+      </LinearGradient>
+    </Animated.View>
+  );
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity 
-            style={styles.createButton}
+  const renderStats = () => (
+    <View style={styles.statsContainer}>
+      {renderStatsCard('Total', stats.total.toString(), 'folder-outline', '#22d3ee', 0)}
+      {renderStatsCard('Active', stats.active.toString(), 'checkmark-circle-outline', '#10b981', 1)}
+      {renderStatsCard('Pending', stats.pending.toString(), 'time-outline', '#f59e0b', 2)}
+      {renderStatsCard('This Month', stats.thisMonth.toString(), 'calendar-outline', '#8b5cf6', 3)}
+    </View>
+  );
+
+  const renderSearchAndFilter = () => (
+    <Animated.View style={[styles.searchContainer, { opacity: fadeAnim }]}>
+      <View style={styles.searchInputContainer}>
+        <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search projects..."
+          placeholderTextColor="#6B7280"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
+    </Animated.View>
+  );
+
+  const renderFilterTabs = () => (
+    <Animated.View style={[styles.filterTabsContainer, { opacity: fadeAnim }]}>
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterTabsContent}
+      >
+        {[
+          { key: 'all', label: 'All' },
+          { key: 'active', label: 'Active' },
+          { key: 'pending', label: 'Pending' }
+        ].map((filter) => (
+          <TouchableOpacity
+            key={filter.key}
+            style={[
+              styles.filterTab,
+              filterStatus === filter.key && styles.activeFilterTab
+            ]}
             onPress={() => {
-              router.push('/create-project');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setFilterStatus(filter.key as any);
             }}
           >
-            <Ionicons name="add" size={20} color="#FFFFFF" />
-            <Text style={styles.createButtonText}>Create Project</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Filter Tabs */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterTabsContainer}
-          contentContainerStyle={styles.filterTabsContent}
-        >
-          {['all', 'active', 'completed', 'planning', 'paused'].map((filter) => (
-            <TouchableOpacity
-              key={filter}
-              style={[
-                styles.filterTab,
-                filterStatus === filter && styles.activeFilterTab
-              ]}
-              onPress={() => setFilterStatus(filter)}
-            >
-              <Text style={[
-                styles.filterTabText,
-                filterStatus === filter && styles.activeFilterTabText
-              ]}>
-                {filter.charAt(0).toUpperCase() + filter.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Projects List */}
-        <View style={styles.projectsContainer}>
-          {filteredProjects.map(renderProjectCard)}
-        </View>
-
-        {/* Empty State */}
-        {filteredProjects.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="folder-open" size={64} color="#9CA3AF" />
-            <Text style={styles.emptyStateTitle}>No projects found</Text>
-            <Text style={styles.emptyStateText}>
-              {searchQuery ? 'Try adjusting your search criteria' : 'Create your first project to get started'}
+            <Text style={[
+              styles.filterTabText,
+              filterStatus === filter.key && styles.activeFilterTabText
+            ]}>
+              {filter.label}
             </Text>
-          </View>
-        )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </Animated.View>
+  );
+
+  const renderProjectCard = (project: Project, index: number) => {
+    return (
+      <Animated.View
+        key={project._id}
+        style={[
+          styles.projectCard,
+          {
+            opacity: fadeAnim,
+            transform: [
+              {
+                translateY: slideAnim.interpolate({
+                  inputRange: [0, 50],
+                  outputRange: [index * 10, 0],
+                })
+              }
+            ]
+          }
+        ]}
+      >
+        <TouchableOpacity
+          onPress={() => handleProjectPress(project)}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['rgba(31, 41, 55, 0.8)', 'rgba(17, 24, 39, 0.8)']}
+            style={styles.projectCardGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.projectHeader}>
+              <View style={styles.projectTitleContainer}>
+                <Text style={styles.projectTitle}>{project.projectName}</Text>
+                <View style={[
+                  styles.statusBadge,
+                  { backgroundColor: project.status === 'active' ? '#10b98130' : '#f59e0b30' }
+                ]}>
+                  <Text style={[
+                    styles.statusText,
+                    { color: project.status === 'active' ? '#10b981' : '#f59e0b' }
+                  ]}>
+                    {project.status}
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={styles.projectActions}>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => router.push({
+                    pathname: '/edit-project',
+                    params: { projectId: project._id }
+                  })}
+                >
+                  <Ionicons name="pencil" size={16} color="#22d3ee" />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={() => handleDeleteProject(project._id)}
+                >
+                  <Ionicons name="trash" size={16} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <Text style={styles.projectDescription} numberOfLines={2}>
+              {project.projectDescription}
+            </Text>
+
+            <View style={styles.projectMeta}>
+              <View style={styles.projectStats}>
+                <View style={styles.statItem}>
+                  <Ionicons name="heart" size={14} color="#ef4444" />
+                  <Text style={styles.statText}>{project.like.length}</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Ionicons name="star" size={14} color="#fbbf24" />
+                  <Text style={styles.statText}>{project.rating}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.projectFooter}>
+              <Text style={styles.dateText}>
+                {new Date(project.createdAt).toLocaleDateString()}
+              </Text>
+              
+              <View style={styles.projectLinks}>
+                {project.gitHubLink && (
+                  <TouchableOpacity style={styles.linkButton}>
+                    <Ionicons name="logo-github" size={16} color="#22d3ee" />
+                  </TouchableOpacity>
+                )}
+                {project.liveLink && (
+                  <TouchableOpacity style={styles.linkButton}>
+                    <Ionicons name="globe-outline" size={16} color="#22d3ee" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
+  const renderCreateButton = () => (
+    <Animated.View style={[styles.createButtonContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+      <TouchableOpacity
+        style={styles.createButton}
+        onPress={handleCreateProject}
+        activeOpacity={0.8}
+      >
+        <LinearGradient
+          colors={['#22d3ee', '#3b82f6']}
+          style={styles.createButtonGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+        >
+          <Ionicons name="add" size={20} color="#FFFFFF" />
+          <Text style={styles.createButtonText}>Create Project</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+
+  const renderEmptyState = () => (
+    <Animated.View style={[styles.emptyState, { opacity: fadeAnim }]}>
+      <LinearGradient
+        colors={['rgba(34, 211, 238, 0.1)', 'rgba(59, 130, 246, 0.1)']}
+        style={styles.emptyStateGradient}
+      >
+        <Ionicons name="folder-open-outline" size={64} color="#22d3ee" />
+        <Text style={styles.emptyStateTitle}>No Projects Found</Text>
+        <Text style={styles.emptyStateText}>
+          {searchQuery ? 'Try adjusting your search criteria' : 'Create your first project to get started'}
+        </Text>
+      </LinearGradient>
+    </Animated.View>
+  );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#000000" />
+        {renderFloatingOrbs()}
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#22d3ee" />
+          <Text style={styles.loadingText}>Loading projects...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      {renderFloatingOrbs()}
+      
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#22d3ee"
+            colors={['#22d3ee']}
+          />
+        }
+      >
+        {renderHeader()}
+        {renderStats()}
+        {renderSearchAndFilter()}
+        {renderCreateButton()}
+        {renderFilterTabs()}
+        
+        <View style={styles.projectsContainer}>
+          {filteredProjects.length > 0 
+            ? filteredProjects.map((project, index) => renderProjectCard(project, index))
+            : renderEmptyState()
+          }
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -321,35 +476,44 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#9CA3AF',
+    fontSize: 16,
+    marginTop: 16,
+  },
   floatingOrb: {
     position: 'absolute',
     borderRadius: 500,
-    backgroundColor: 'rgba(0, 216, 255, 0.1)',
+    backgroundColor: 'rgba(34, 211, 238, 0.1)',
   },
   orb1: {
-    width: 150,
-    height: 150,
-    top: 100,
-    right: -50,
-  },
-  orb2: {
     width: 200,
     height: 200,
-    bottom: 200,
-    left: -80,
-    backgroundColor: 'rgba(34, 211, 238, 0.08)',
+    top: 100,
+    right: -100,
+  },
+  orb2: {
+    width: 150,
+    height: 150,
+    bottom: 300,
+    left: -75,
+    backgroundColor: 'rgba(59, 130, 246, 0.08)',
   },
   orb3: {
     width: 120,
     height: 120,
-    top: 300,
-    left: width - 80,
-    backgroundColor: 'rgba(236, 38, 143, 0.06)',
+    top: 400,
+    right: 20,
+    backgroundColor: 'rgba(139, 92, 246, 0.06)',
   },
   header: {
-    paddingTop: 24,
-    paddingBottom: 28,
-    paddingHorizontal: 4,
+    paddingTop: 20,
+    paddingBottom: 24,
   },
   headerTop: {
     flexDirection: 'row',
@@ -358,80 +522,59 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   profileButton: {
-    padding: 6,
-    borderRadius: 24,
+    borderRadius: 25,
   },
   profileAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(31, 41, 55, 0.8)',
-    borderWidth: 2,
-    borderColor: '#22d3ee',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#22d3ee',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 6,
   },
   profileAvatarText: {
-    fontSize: 22,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   notificationButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: 'rgba(31, 41, 55, 0.8)',
     borderWidth: 1,
     borderColor: 'rgba(55, 65, 81, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
   },
   notificationBadge: {
     position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#EF4444',
+    top: -5,
+    right: -5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#ef4444',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#000000',
   },
   notificationBadgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   headerContent: {
     alignItems: 'flex-start',
-    paddingHorizontal: 4,
   },
   title: {
-    fontSize: 34,
-    fontWeight: '800',
+    fontSize: 32,
+    fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 6,
-    letterSpacing: 1.2,
-    textShadowColor: 'rgba(34, 211, 238, 0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#22d3ee',
-    opacity: 0.9,
+    color: '#9CA3AF',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -440,19 +583,22 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statCard: {
-    backgroundColor: 'rgba(31, 41, 55, 0.6)',
-    borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.5)',
+    width: (width - 44) / 2,
+    height: 100,
+  },
+  statGradient: {
+    flex: 1,
     borderRadius: 16,
     padding: 16,
-    width: (width - 44) / 2,
+    borderWidth: 1,
+    borderColor: 'rgba(55, 65, 81, 0.3)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   statIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(34, 211, 238, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -461,21 +607,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9CA3AF',
     marginBottom: 4,
-    textAlign: 'center',
   },
   statValue: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#22d3ee',
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   searchContainer: {
-    flexDirection: 'row',
     marginBottom: 16,
-    gap: 12,
   },
   searchInputContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(31, 41, 55, 0.8)',
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -492,27 +633,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 12,
   },
-  filterButton: {
-    backgroundColor: 'rgba(31, 41, 55, 0.6)',
-    borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.5)',
-    borderRadius: 12,
-    width: 48,
-    height: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  quickActions: {
+  createButtonContainer: {
     marginBottom: 16,
   },
   createButton: {
-    backgroundColor: 'rgba(34, 211, 238, 0.8)',
     borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    overflow: 'hidden',
+  },
+  createButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     gap: 8,
   },
   createButtonText: {
@@ -524,7 +657,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   filterTabsContent: {
-    paddingHorizontal: 16,
+    paddingRight: 16,
     gap: 8,
   },
   filterTab: {
@@ -534,8 +667,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(31, 41, 55, 0.6)',
     borderWidth: 1,
     borderColor: 'rgba(55, 65, 81, 0.5)',
-    minWidth: 80,
-    alignItems: 'center',
   },
   activeFilterTab: {
     backgroundColor: 'rgba(34, 211, 238, 0.2)',
@@ -543,7 +674,7 @@ const styles = StyleSheet.create({
   },
   filterTabText: {
     color: '#9CA3AF',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '500',
   },
   activeFilterTabText: {
@@ -554,11 +685,14 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   projectCard: {
-    backgroundColor: 'rgba(31, 41, 55, 0.6)',
-    borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.5)',
     borderRadius: 16,
+    overflow: 'hidden',
+  },
+  projectCardGradient: {
     padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(55, 65, 81, 0.3)',
+    borderRadius: 16,
   },
   projectHeader: {
     flexDirection: 'row',
@@ -576,15 +710,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 8,
   },
-  priorityBadge: {
+  statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 12,
     alignSelf: 'flex-start',
   },
-  priorityText: {
+  statusText: {
     fontSize: 10,
     fontWeight: '600',
+    textTransform: 'uppercase',
   },
   projectActions: {
     flexDirection: 'row',
@@ -607,80 +742,77 @@ const styles = StyleSheet.create({
   projectMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  teamText: {
-    fontSize: 12,
+  techStackContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 6,
+  },
+  techBadge: {
+    backgroundColor: 'rgba(34, 211, 238, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  techText: {
+    fontSize: 10,
     color: '#22d3ee',
     fontWeight: '500',
   },
-  dueDateText: {
-    fontSize: 12,
+  moreTechText: {
+    fontSize: 10,
     color: '#9CA3AF',
   },
-  progressContainer: {
+  projectStats: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
     gap: 12,
   },
-  progressBar: {
-    flex: 1,
-    height: 6,
-    backgroundColor: 'rgba(55, 65, 81, 0.5)',
-    borderRadius: 3,
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#22d3ee',
-    borderRadius: 3,
-  },
-  progressText: {
+  statText: {
     fontSize: 12,
-    color: '#22d3ee',
-    fontWeight: '600',
-    minWidth: 35,
-    textAlign: 'right',
+    color: '#9CA3AF',
   },
   projectFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+  dateText: {
+    fontSize: 12,
+    color: '#6B7280',
   },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  tagsContainer: {
+  projectLinks: {
     flexDirection: 'row',
+    gap: 8,
+  },
+  linkButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(34, 211, 238, 0.2)',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-  },
-  tag: {
-    backgroundColor: 'rgba(55, 65, 81, 0.5)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  tagText: {
-    fontSize: 10,
-    color: '#9CA3AF',
-  },
-  moreTagsText: {
-    fontSize: 10,
-    color: '#9CA3AF',
   },
   emptyState: {
-    alignItems: 'center',
     paddingVertical: 60,
+    alignItems: 'center',
+  },
+  emptyStateGradient: {
+    padding: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.2)',
   },
   emptyStateTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     color: '#FFFFFF',
     marginTop: 16,
@@ -694,4 +826,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ProjectsScreen;
+export default ProjectsScreenNew;

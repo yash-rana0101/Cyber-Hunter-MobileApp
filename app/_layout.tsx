@@ -1,11 +1,12 @@
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
+import PreloaderScreen from '../components/PreloaderScreen';
 import { Colors } from '../constants/Colors';
 import { AppProviders } from '../context/AppProviders';
 
@@ -25,6 +26,19 @@ export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+  
+  const [showPreloader, setShowPreloader] = useState(true);
+
+  useEffect(() => {
+    // Show preloader for at least 2 seconds after fonts are loaded
+    if (loaded) {
+      const timer = setTimeout(() => {
+        setShowPreloader(false);
+      }, 2000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [loaded]);
 
   if (!loaded) {
     return (
@@ -32,6 +46,10 @@ export default function RootLayout() {
         <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
+  }
+
+  if (showPreloader) {
+    return <PreloaderScreen onFinish={() => setShowPreloader(false)} />;
   }
 
   return (

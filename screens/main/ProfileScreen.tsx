@@ -475,7 +475,10 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
           <View style={styles.settingsContainer}>
-            <TouchableOpacity style={styles.settingItem}>
+            <TouchableOpacity 
+              style={styles.settingItem}
+              onPress={() => router.push('/settings/security' as any)}
+            >
               <View style={styles.settingLeft}>
                 <Ionicons name="shield-checkmark" size={20} color="#22d3ee" />
                 <Text style={styles.settingText}>Security Settings</Text>
@@ -483,7 +486,10 @@ const ProfileScreen: React.FC = () => {
               <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.settingItem}>
+            <TouchableOpacity 
+              style={styles.settingItem}
+              onPress={() => router.push('/settings/notifications' as any)}
+            >
               <View style={styles.settingLeft}>
                 <Ionicons name="notifications" size={20} color="#22d3ee" />
                 <Text style={styles.settingText}>Notification Preferences</Text>
@@ -491,7 +497,10 @@ const ProfileScreen: React.FC = () => {
               <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.settingItem}>
+            <TouchableOpacity 
+              style={styles.settingItem}
+              onPress={() => router.push('/settings/change-password' as any)}
+            >
               <View style={styles.settingLeft}>
                 <Ionicons name="key" size={20} color="#22d3ee" />
                 <Text style={styles.settingText}>Change Password</Text>

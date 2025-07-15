@@ -17,11 +17,6 @@ export const NavigationGuard: React.FC<NavigationGuardProps> = ({ children }) =>
     const inAuthGroup = segments[0] === 'auth';
     const inTabsGroup = segments[0] === '(tabs)';
 
-    console.log('NavigationGuard - isAuthenticated:', isAuthenticated);
-    console.log('NavigationGuard - segments:', segments);
-    console.log('NavigationGuard - inAuthGroup:', inAuthGroup);
-    console.log('NavigationGuard - inTabsGroup:', inTabsGroup);
-
     if (!isAuthenticated) {
       // User is not authenticated
       if (inTabsGroup) {

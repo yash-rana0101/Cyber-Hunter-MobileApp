@@ -8,6 +8,7 @@ import { NavigationGuard } from '../components/NavigationGuard';
 import { AppDispatch, persistor, store } from '../store';
 import { checkOnboardingStatus } from '../store/slices/authSlice';
 import { AuthProvider } from './AuthContext';
+import { OverlayProvider } from './OverlayProvider';
 import { TeamProvider } from './TeamContext';
 
 const OnboardingInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -31,8 +32,10 @@ export const AppProviders: React.FC<{children: React.ReactNode}> = ({children}) 
           <AuthProvider>
             <NavigationGuard>
               <TeamProvider>
-                {children}
-                <Toast />
+                <OverlayProvider>
+                  {children}
+                  <Toast />
+                </OverlayProvider>
               </TeamProvider>
             </NavigationGuard>
           </AuthProvider>

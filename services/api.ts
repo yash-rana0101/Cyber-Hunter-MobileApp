@@ -1,7 +1,6 @@
+import { API_URL } from '@/constants/url';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-
-const BASE_URL = 'https://0023edba1c90.ngrok-free.app';
 
 // Flag to prevent multiple simultaneous refresh attempts
 let isRefreshing = false;
@@ -17,7 +16,7 @@ const addRefreshSubscriber = (callback: (token: string) => void) => {
 };
 
 const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -75,7 +74,7 @@ api.interceptors.response.use(
         
         // Attempt token refresh using a fresh axios instance to avoid interceptor loop
         const refreshResponse = await axios.create().put(
-          `${BASE_URL}/api/v1/auth/refresh`,
+          `${API_URL}/api/v1/auth/refresh`,
           {},
           {
             headers: {
@@ -188,6 +187,65 @@ export const userService = {
   },
   updateUserProfile: async (userData: any) => {
     const response = await api.put('/api/v1/user/profile', userData);
+    return response.data;
+  }
+};
+
+// Project services
+export const projectService = {
+  // Individual project methods
+  createProject: async (formData: FormData) => {
+    const response = await api.post('/api/v1/project', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+  getProjects: async () => {
+    const response = await api.get('/api/v1/project');
+    return response.data;
+  },
+  getProjectById: async (projectId: string) => {
+    const response = await api.get(`/api/v1/project/${projectId}`);
+    return response.data;
+  },
+  updateProject: async (projectId: string, formData: FormData) => {
+    const response = await api.put(`/api/v1/project/${projectId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+  deleteProject: async (projectId: string) => {
+    const response = await api.delete(`/api/v1/project/${projectId}`);
+    return response.data;
+  },
+
+  // Team project methods
+  createTeamProject: async (formData: FormData) => {
+    const response = await api.post('/api/v1/project/team', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+  getTeamProjects: async (teamId: string) => {
+    const response = await api.get(`/api/v1/project/team/${teamId}`);
+    return response.data;
+  },
+  updateTeamProject: async (projectId: string, formData: FormData) => {
+    const response = await api.put(`/api/v1/project/team/${projectId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+  deleteTeamProject: async (projectId: string) => {
+    const response = await api.delete(`/api/v1/project/team/${projectId}`);
     return response.data;
   }
 };

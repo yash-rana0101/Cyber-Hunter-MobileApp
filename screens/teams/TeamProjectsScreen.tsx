@@ -1,88 +1,120 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import ScreenHeader from '../../components/ui/ScreenHeader';
+import { useTeam } from '../../context/TeamContext';
+import { projectService } from '../../services/api';
 
 interface Project {
-  id: number;
-  title: string;
-  description: string;
-  status: 'active' | 'completed' | 'on-hold';
-  priority: 'high' | 'medium' | 'low';
-  progress: number;
-  members: number;
-  deadline: string;
-  tags: string[];
+  _id: string;
+  projectName: string;
+  projectDescription: string;
+  gitHubLink: string;
+  liveLink?: string;
+  projectThumbnail: string;
+  projectImage: string[];
+  techStack: string[];
+  language: string[];
+  rating: number;
+  point: number;
+  totalPoint: number;
+  createdAt: string;
+  updatedAt: string;
+  teamId: string;
+  userId: string;
 }
 
 const TeamProjectsScreen: React.FC = () => {
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { userTeam } = useTeam();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
-  const mockProjects: Project[] = [
-    {
-      id: 1,
-      title: 'Cyber Defense Platform',
-      description: 'Next-gen security monitoring system',
-      status: 'active',
-      priority: 'high',
-      progress: 75,
-      members: 8,
-      deadline: '2024-02-15',
-      tags: ['Security', 'AI', 'React']
-    },
-    {
-      id: 2,
-      title: 'Mobile Authentication',
-      description: 'Biometric auth integration',
-      status: 'active',
-      priority: 'medium',
-      progress: 45,
-      members: 5,
-      deadline: '2024-03-01',
-      tags: ['Mobile', 'Auth', 'iOS']
-    },
-    {
-      id: 3,
-      title: 'Data Analytics Dashboard',
-      description: 'Real-time metrics visualization',
-      status: 'completed',
-      priority: 'medium',
-      progress: 100,
-      members: 6,
-      deadline: '2024-01-20',
-      tags: ['Analytics', 'Dashboard', 'D3']
-    },
-    {
-      id: 4,
-      title: 'API Gateway Enhancement',
-      description: 'Performance optimization project',
-      status: 'on-hold',
-      priority: 'low',
-      progress: 30,
-      members: 4,
-      deadline: '2024-04-10',
-      tags: ['Backend', 'API', 'Node.js']
+  // Animation setup
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
+  const loadProjects = useCallback(async () => {
+    if (!userTeam) return;
+    
+    try {
+      setError(null);
+      const response = await projectService.getTeamProjects(userTeam._id);
+      if (response?.data) {
+        setProjects(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading team projects:', err);
+      setError('Failed to load projects');
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  }, [userTeam]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadProjects();
+    setRefreshing(false);
+  }, [loadProjects]);
+
+  const getStatusFromDate = (createdAt: string) => {
+    const daysSinceCreation = Math.floor((Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceCreation < 30) return 'active';
+    if (daysSinceCreation < 90) return 'completed';
+    return 'on-hold';
+  };
+
+  const getPriorityFromPoints = (points: number) => {
+    if (points >= 100) return 'high';
+    if (points >= 50) return 'medium';
+    return 'low';
+  };
+
+  const getProgressFromPoints = (points: number, totalPoints: number) => {
+    return totalPoints > 0 ? Math.min(Math.round((points / totalPoints) * 100), 100) : 0;
+  };
 
   const filters = [
-    { key: 'all', label: 'All', count: mockProjects.length },
-    { key: 'active', label: 'Active', count: mockProjects.filter(p => p.status === 'active').length },
-    { key: 'completed', label: 'Completed', count: mockProjects.filter(p => p.status === 'completed').length },
-    { key: 'on-hold', label: 'On Hold', count: mockProjects.filter(p => p.status === 'on-hold').length },
+    { key: 'all', label: 'All', count: projects.length },
+    { key: 'active', label: 'Active', count: projects.filter(p => getStatusFromDate(p.createdAt) === 'active').length },
+    { key: 'completed', label: 'Completed', count: projects.filter(p => getStatusFromDate(p.createdAt) === 'completed').length },
+    { key: 'on-hold', label: 'On Hold', count: projects.filter(p => getStatusFromDate(p.createdAt) === 'on-hold').length },
   ];
 
   const filteredProjects = selectedFilter === 'all' 
-    ? mockProjects 
-    : mockProjects.filter(project => project.status === selectedFilter);
+    ? projects 
+    : projects.filter(project => getStatusFromDate(project.createdAt) === selectedFilter);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -128,90 +160,162 @@ const TeamProjectsScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
-  const renderProjectCard = (project: Project) => (
-    <TouchableOpacity 
-      key={project.id} 
-      style={styles.projectCard}
-      onPress={() => router.push(`/view-project?id=${project.id}`)}
-    >
-      <View style={styles.cardHeader}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.projectTitle}>{project.title}</Text>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: `${getStatusColor(project.status)}20` }
-          ]}>
-            <View style={[
-              styles.statusDot,
-              { backgroundColor: getStatusColor(project.status) }
-            ]} />
-            <Text style={[
-              styles.statusText,
-              { color: getStatusColor(project.status) }
-            ]}>
-              {project.status}
-            </Text>
-          </View>
-        </View>
-        
-        <Text style={styles.projectDescription}>{project.description}</Text>
-        
-        <View style={styles.cardMetrics}>
-          <View style={styles.progressContainer}>
-            <Text style={styles.progressLabel}>Progress</Text>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill,
-                  { width: `${project.progress}%` }
-                ]} 
-              />
-            </View>
-            <Text style={styles.progressText}>{project.progress}%</Text>
-          </View>
-        </View>
-      </View>
+  const renderProjectCard = (project: Project) => {
+    const status = getStatusFromDate(project.createdAt);
+    const priority = getPriorityFromPoints(project.point);
+    const progress = getProgressFromPoints(project.point, project.totalPoint);
+    const formattedDate = new Date(project.createdAt).toLocaleDateString();
 
-      <View style={styles.cardFooter}>
-        <View style={styles.projectMeta}>
-          <View style={styles.metaItem}>
-            <Ionicons name="people" size={14} color="#64748b" />
-            <Text style={styles.metaText}>{project.members} members</Text>
-          </View>
-          
-          <View style={styles.metaItem}>
-            <Ionicons name="calendar" size={14} color="#64748b" />
-            <Text style={styles.metaText}>{project.deadline}</Text>
-          </View>
-          
-          <View style={[
-            styles.priorityBadge,
-            { backgroundColor: `${getPriorityColor(project.priority)}20` }
-          ]}>
-            <Text style={[
-              styles.priorityText,
-              { color: getPriorityColor(project.priority) }
-            ]}>
-              {project.priority}
-            </Text>
-          </View>
-        </View>
-        
-        <View style={styles.tagsContainer}>
-          {project.tags.slice(0, 3).map((tag, index) => (
-            <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>{tag}</Text>
+    return (
+      <Animated.View
+        key={project._id}
+        style={[
+          styles.projectCard,
+          {
+            transform: [{ translateY: slideAnim }],
+            opacity: fadeAnim,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={() => router.push(`/view-project?id=${project._id}`)}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <Text style={styles.projectTitle}>{project.projectName}</Text>
+              <View style={[
+                styles.statusBadge,
+                { backgroundColor: `${getStatusColor(status)}20` }
+              ]}>
+                <View style={[
+                  styles.statusDot,
+                  { backgroundColor: getStatusColor(status) }
+                ]} />
+                <Text style={[
+                  styles.statusText,
+                  { color: getStatusColor(status) }
+                ]}>
+                  {status}
+                </Text>
+              </View>
             </View>
-          ))}
-          {project.tags.length > 3 && (
-            <View style={styles.moreTagsIndicator}>
-              <Text style={styles.moreTagsText}>+{project.tags.length - 3}</Text>
+            
+            <Text style={styles.projectDescription}>{project.projectDescription || 'No description available'}</Text>
+            
+            <View style={styles.cardMetrics}>
+              <View style={styles.progressContainer}>
+                <Text style={styles.progressLabel}>Progress</Text>
+                <View style={styles.progressBar}>
+                  <View 
+                    style={[
+                      styles.progressFill,
+                      { width: `${progress}%` }
+                    ]} 
+                  />
+                </View>
+                <Text style={styles.progressText}>{progress}%</Text>
+              </View>
             </View>
-          )}
+          </View>
+
+          <View style={styles.cardFooter}>
+            <View style={styles.projectMeta}>
+              <View style={styles.metaItem}>
+                <Ionicons name="people" size={14} color="#64748b" />
+                <Text style={styles.metaText}>Team Project</Text>
+              </View>
+              
+              <View style={styles.metaItem}>
+                <Ionicons name="calendar" size={14} color="#64748b" />
+                <Text style={styles.metaText}>{formattedDate}</Text>
+              </View>
+              
+              <View style={[
+                styles.priorityBadge,
+                { backgroundColor: `${getPriorityColor(priority)}20` }
+              ]}>
+                <Text style={[
+                  styles.priorityText,
+                  { color: getPriorityColor(priority) }
+                ]}>
+                  {priority}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.tagsContainer}>
+              {project.techStack.slice(0, 3).map((tech: string, index: number) => (
+                <View key={index} style={styles.tag}>
+                  <Text style={styles.tagText}>{tech}</Text>
+                </View>
+              ))}
+              {project.techStack.length > 3 && (
+                <View style={styles.moreTagsIndicator}>
+                  <Text style={styles.moreTagsText}>+{project.techStack.length - 3}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        {renderFloatingOrbs()}
+        <ScreenHeader 
+          title="Team Projects"
+          showBackButton={true}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#22d3ee" />
+          <Text style={styles.loadingText}>Loading projects...</Text>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        {renderFloatingOrbs()}
+        <ScreenHeader 
+          title="Team Projects"
+          showBackButton={true}
+        />
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+          <Text style={styles.errorTitle}>Failed to load projects</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadProjects}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!userTeam) {
+    return (
+      <SafeAreaView style={styles.container}>
+        {renderFloatingOrbs()}
+        <ScreenHeader 
+          title="Team Projects"
+          showBackButton={true}
+        />
+        <View style={styles.emptyTeamContainer}>
+          <Ionicons name="people-outline" size={48} color="#64748b" />
+          <Text style={styles.emptyTeamTitle}>No team selected</Text>
+          <Text style={styles.emptyTeamText}>Join a team to view projects</Text>
+          <TouchableOpacity style={styles.joinTeamButton} onPress={() => router.push('/join-team')}>
+            <Text style={styles.joinTeamButtonText}>Join Team</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -230,22 +334,28 @@ const TeamProjectsScreen: React.FC = () => {
         }
       />
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Stats Summary */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{mockProjects.length}</Text>
+            <Text style={styles.statNumber}>{projects.length}</Text>
             <Text style={styles.statLabel}>Total Projects</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>
-              {mockProjects.filter(p => p.status === 'active').length}
+              {projects.filter(p => getStatusFromDate(p.createdAt) === 'active').length}
             </Text>
             <Text style={styles.statLabel}>Active</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>
-              {Math.round(mockProjects.reduce((acc, p) => acc + p.progress, 0) / mockProjects.length)}%
+              {projects.length > 0 ? Math.round(projects.reduce((acc, p) => acc + getProgressFromPoints(p.point, p.totalPoint), 0) / projects.length) : 0}%
             </Text>
             <Text style={styles.statLabel}>Avg Progress</Text>
           </View>
@@ -275,6 +385,9 @@ const TeamProjectsScreen: React.FC = () => {
                   : `No ${selectedFilter} projects available.`
                 }
               </Text>
+              <TouchableOpacity style={styles.createProjectButton} onPress={() => router.push('/create-project')}>
+                <Text style={styles.createProjectButtonText}>Create Project</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -535,6 +648,92 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     maxWidth: 280,
+  },
+  // Loading styles
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#64748b',
+    marginTop: 12,
+  },
+  // Error styles
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#22d3ee',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  // Empty team styles
+  emptyTeamContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  emptyTeamTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyTeamText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  joinTeamButton: {
+    backgroundColor: '#22d3ee',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  joinTeamButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  // Create project button
+  createProjectButton: {
+    backgroundColor: '#22d3ee',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  createProjectButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
 

@@ -1,25 +1,108 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Dimensions,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import UserProfileAvatar from '../../components/ui/UserProfileAvatar';
+import MainScreenHeader from '../../components/ui/MainScreenHeader';
+import { Team, useTeam } from '../../context/TeamContext';
+import { projectService, teamService } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
 const TeamsScreen: React.FC = () => {
-  const teamStats = [
-    { label: 'Team Members', value: '24', icon: 'people' },
-    { label: 'Active Projects', value: '12', icon: 'folder' },
-    { label: 'Completed', value: '38', icon: 'checkmark-circle' },
-    { label: 'Team Rank', value: '#3', icon: 'trophy' },
+  const { teams, userTeam, isLoading, loadTeams } = useTeam();
+  const [userTeams, setUserTeams] = useState<Team[]>([]);
+  const [teamStats, setTeamStats] = useState({
+    totalMembers: 0,
+    activeProjects: 0,
+    completedProjects: 0,
+    teamRank: 0,
+  });
+  const [refreshing, setRefreshing] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+
+  // Animation setup
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
+  // Load user teams and stats
+  const loadUserTeamsAndStats = useCallback(async () => {
+    try {
+      // Load user's teams
+      const userTeamsResponse = await teamService.getUserTeams();
+      if (userTeamsResponse?.data) {
+        setUserTeams(userTeamsResponse.data);
+        
+        // Calculate stats
+        const totalMembers = userTeamsResponse.data.reduce(
+          (acc: number, team: Team) => acc + team.TeamMembers.length, 0
+        );
+        
+        // Get team projects for active projects count
+        let activeProjects = 0;
+        for (const team of userTeamsResponse.data) {
+          try {
+            const projectsResponse = await projectService.getTeamProjects(team._id);
+            if (projectsResponse?.data) {
+              activeProjects += projectsResponse.data.filter((p: any) => p.status === 'active').length;
+            }
+          } catch {
+            console.log('Could not load projects for team:', team._id);
+          }
+        }
+        
+        setTeamStats({
+          totalMembers,
+          activeProjects,
+          completedProjects: 0, // Will be calculated based on project status
+          teamRank: userTeamsResponse.data.length > 0 ? userTeamsResponse.data[0].points || 0 : 0,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading user teams and stats:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTeams();
+    loadUserTeamsAndStats();
+  }, [loadTeams, loadUserTeamsAndStats]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadTeams();
+    await loadUserTeamsAndStats();
+    setRefreshing(false);
+  }, [loadTeams, loadUserTeamsAndStats]);
+
+  const teamStatsData = [
+    { label: 'Team Members', value: teamStats.totalMembers.toString(), icon: 'people' },
+    { label: 'Active Projects', value: teamStats.activeProjects.toString(), icon: 'folder' },
+    { label: 'Your Teams', value: userTeams.length.toString(), icon: 'checkmark-circle' },
+    { label: 'Team Points', value: teamStats.teamRank.toString(), icon: 'trophy' },
   ];
 
   const teamActions = [
@@ -53,28 +136,31 @@ const TeamsScreen: React.FC = () => {
     },
   ];
 
-  const recentTeams = [
-    { id: 1, name: 'Quantum Defenders', members: 8, status: 'active', badge: 'gold' },
-    { id: 2, name: 'Cyber Phoenix', members: 12, status: 'active', badge: 'silver' },
-    { id: 3, name: 'Digital Warriors', members: 6, status: 'recruiting', badge: 'bronze' },
-  ];
-
   const renderFloatingOrbs = () => (
-    <>
+    <Animated.View style={{ opacity: fadeAnim }}>
       <View style={[styles.floatingOrb, styles.orb1]} />
       <View style={[styles.floatingOrb, styles.orb2]} />
       <View style={[styles.floatingOrb, styles.orb3]} />
-    </>
+    </Animated.View>
   );
 
   const renderStatCard = (stat: any, index: number) => (
-    <View key={index} style={styles.statCard}>
+    <Animated.View
+      key={index}
+      style={[
+        styles.statCard,
+        {
+          transform: [{ translateY: slideAnim }],
+          opacity: fadeAnim,
+        },
+      ]}
+    >
       <View style={styles.statIconContainer}>
         <Ionicons name={stat.icon as any} size={20} color="#22d3ee" />
       </View>
       <Text style={styles.statLabel}>{stat.label}</Text>
       <Text style={styles.statValue}>{stat.value}</Text>
-    </View>
+    </Animated.View>
   );
 
   const getGradientStyle = (gradient: string) => {
@@ -99,7 +185,9 @@ const TeamsScreen: React.FC = () => {
   const renderActionCard = (action: any) => (
     <TouchableOpacity 
       key={action.id} 
-      style={styles.actionCard}
+      style={[styles.actionCard, {
+        transform: [{ translateY: slideAnim }],
+      }]}
       onPress={() => handleActionPress(action.id)}
     >
       <View style={[styles.actionIconContainer, getGradientStyle(action.gradient)]}>
@@ -110,21 +198,42 @@ const TeamsScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
-  const renderTeamCard = (team: any) => (
-    <TouchableOpacity key={team.id} style={styles.teamCard}>
-      <View style={styles.teamCardHeader}>
-        <View style={[styles.teamBadge, getBadgeStyle(team.badge)]}>
-          <View style={styles.teamBadgeInner} />
+  const renderTeamCard = (team: Team) => (
+    <Animated.View
+      key={team._id}
+      style={[
+        styles.teamCard,
+        {
+          transform: [{ translateY: slideAnim }],
+          opacity: fadeAnim,
+        },
+      ]}
+    >
+      <TouchableOpacity onPress={() => router.push(`/team-details/${team._id}` as any)}>
+        <View style={styles.teamCardHeader}>
+          <View style={[styles.teamBadge, getBadgeStyle('gold')]}>
+            <View style={styles.teamBadgeInner} />
+          </View>
+          <View style={styles.teamInfo}>
+            <Text style={styles.teamName}>{team.TeamName}</Text>
+            <Text style={styles.teamMembers}>{team.TeamMembers.length} members</Text>
+          </View>
+          <View style={[styles.statusBadge, styles.activeBadge]}>
+            <Text style={styles.statusText}>Active</Text>
+          </View>
         </View>
-        <View style={styles.teamInfo}>
-          <Text style={styles.teamName}>{team.name}</Text>
-          <Text style={styles.teamMembers}>{team.members} members</Text>
+        <Text style={styles.teamDescription} numberOfLines={2}>
+          {team.TeamDescription || 'No description available'}
+        </Text>
+        <View style={styles.teamTechStack}>
+          {team.techStack.slice(0, 3).map((tech, index) => (
+            <View key={index} style={styles.techTag}>
+              <Text style={styles.techTagText}>{tech}</Text>
+            </View>
+          ))}
         </View>
-        <View style={[styles.statusBadge, team.status === 'active' ? styles.activeBadge : styles.recruitingBadge]}>
-          <Text style={styles.statusText}>{team.status}</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 
   const handleActionPress = (actionId: number) => {
@@ -144,35 +253,36 @@ const TeamsScreen: React.FC = () => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#22d3ee" />
+          <Text style={styles.loadingText}>Loading teams...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       {renderFloatingOrbs()}
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <UserProfileAvatar size="medium" />
-            
-            <TouchableOpacity 
-              style={styles.notificationButton}
-              onPress={() => router.push('/notifications')}
-            >
-              <Ionicons name="notifications" size={24} color="#22d3ee" />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>3</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>TEAMS</Text>
-            <Text style={styles.subtitle}>Collaborate with elite hackers</Text>
-          </View>
-        </View>
+        <MainScreenHeader
+          title="TEAMS"
+          subtitle="Collaborate with elite hackers"
+        />
 
         {/* Stats Grid */}
         <View style={styles.statsContainer}>
-          {teamStats.map((stat, index) => renderStatCard(stat, index))}
+          {teamStatsData.map((stat, index) => renderStatCard(stat, index))}
         </View>
 
         {/* Action Cards */}
@@ -183,10 +293,20 @@ const TeamsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Recent Teams */}
+        {/* Your Teams */}
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Your Teams</Text>
-          {recentTeams.map(renderTeamCard)}
+          {userTeams.length > 0 ? (
+            userTeams.map(renderTeamCard)
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={48} color="#374151" />
+              <Text style={styles.emptyStateText}>No teams yet</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Create or join a team to get started
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -469,6 +589,59 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#FFFFFF',
     textTransform: 'uppercase',
+  },
+  // New styles for dynamic content
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    marginTop: 16,
+  },
+  teamDescription: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  teamTechStack: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+    gap: 4,
+  },
+  techTag: {
+    backgroundColor: 'rgba(34, 211, 238, 0.1)',
+    borderColor: 'rgba(34, 211, 238, 0.3)',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  techTagText: {
+    color: '#22d3ee',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+  },
+  emptyStateText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  emptyStateSubtext: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
 

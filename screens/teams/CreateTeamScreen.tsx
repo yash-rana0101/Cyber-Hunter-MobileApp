@@ -1,76 +1,166 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import CyberButton from '../../components/ui/CyberButton';
 import GlassCard from '../../components/ui/GlassCard';
 import ScreenHeader from '../../components/ui/ScreenHeader';
 import { Colors } from '../../constants/Colors';
+import { teamService } from '../../services/api';
 
 const CreateTeamScreen: React.FC = () => {
   const router = useRouter();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
   
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    category: '',
-    isPrivate: false,
-    maxMembers: '10',
+    TeamName: '',
+    TeamDescription: '',
+    techStack: [] as string[],
+    interests: [] as string[],
+    TeamMembers: [] as string[],
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [teamLogo, setTeamLogo] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<any>(null);
 
-  const categories = [
-    'Web3 Development',
-    'DeFi Protocol',
-    'NFT Project',
-    'Gaming',
-    'Infrastructure',
-    'Security Audit',
-    'Research',
-    'Other'
+  const techStackOptions = [
+    'React', 'Node.js', 'Python', 'JavaScript', 'TypeScript', 'MongoDB', 
+    'PostgreSQL', 'Docker', 'AWS', 'Blockchain', 'Solidity', 'Web3',
+    'React Native', 'Flutter', 'Swift', 'Kotlin', 'Java', 'C++',
+    'Machine Learning', 'AI', 'Data Science', 'DevOps', 'Cybersecurity'
   ];
 
+  const interestOptions = [
+    'Web Development', 'Mobile Development', 'Blockchain', 'AI/ML',
+    'Data Science', 'Cybersecurity', 'Game Development', 'IoT',
+    'Cloud Computing', 'DevOps', 'UI/UX Design', 'Product Management'
+  ];
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
   const handleCreateTeam = async () => {
-    if (!formData.name || !formData.description) {
+    if (!formData.TeamName || !formData.TeamDescription) {
       Alert.alert('Error', 'Please fill in team name and description');
       return;
     }
 
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const teamFormData = new FormData();
+      teamFormData.append('TeamName', formData.TeamName);
+      teamFormData.append('TeamDescription', formData.TeamDescription);
+      
+      // Add tech stack
+      formData.techStack.forEach((tech) => {
+        teamFormData.append('techStack', tech);
+      });
+      
+      // Add interests
+      formData.interests.forEach((interest) => {
+        teamFormData.append('interests', interest);
+      });
+      
+      // Add team members if any
+      formData.TeamMembers.forEach((member) => {
+        teamFormData.append('TeamMembers', member);
+      });
+
+      // Add team logo if selected
+      if (logoFile) {
+        teamFormData.append('TeamLogo', {
+          uri: logoFile.uri,
+          type: logoFile.mimeType || 'image/jpeg',
+          name: logoFile.fileName || 'team-logo.jpg',
+        } as any);
+      }
+
+      const response = await teamService.createTeam(teamFormData);
+      
+      if (response.success) {
+        Alert.alert('Success', 'Team created successfully!', [
+          {
+            text: 'OK',
+            onPress: () => router.back(),
+          },
+        ]);
+      } else {
+        Alert.alert('Error', response.message || 'Failed to create team');
+      }
+    } catch (error: any) {
+      console.error('Create team error:', error);
+      Alert.alert('Error', error.response?.data?.message || 'Failed to create team');
+    } finally {
       setIsLoading(false);
-      Alert.alert('Success', 'Team created successfully!', [
-        {
-          text: 'OK',
-          onPress: () => router.back(),
-        },
-      ]);
-    }, 2000);
+    }
   };
 
-  const handleInputChange = (field: keyof typeof formData, value: string) => {
+  const handleInputChange = (field: keyof typeof formData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleTechStackToggle = (tech: string) => {
+    setFormData(prev => ({
+      ...prev,
+      techStack: prev.techStack.includes(tech)
+        ? prev.techStack.filter(t => t !== tech)
+        : [...prev.techStack, tech]
+    }));
+  };
+
+  const handleInterestToggle = (interest: string) => {
+    setFormData(prev => ({
+      ...prev,
+      interests: prev.interests.includes(interest)
+        ? prev.interests.filter(i => i !== interest)
+        : [...prev.interests, interest]
+    }));
+  };
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setTeamLogo(result.assets[0].uri);
+      setLogoFile(result.assets[0]);
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#000000', '#1a1a1a', '#000000']}
-        style={styles.container}
-      >
+      <View style={styles.container}>
         <ScreenHeader title="Create Team" showBackButton />
         
         <KeyboardAvoidingView
@@ -82,6 +172,20 @@ const CreateTeamScreen: React.FC = () => {
             showsVerticalScrollIndicator={false}
           >
             <GlassCard style={styles.formCard}>
+              {/* Team Logo */}
+              <View style={styles.logoContainer}>
+                <TouchableOpacity style={styles.logoButton} onPress={pickImage}>
+                  {teamLogo ? (
+                    <Image source={{ uri: teamLogo }} style={styles.logoImage} />
+                  ) : (
+                    <View style={styles.logoPlaceholder}>
+                      <Ionicons name="camera" size={24} color={Colors.textSecondary} />
+                      <Text style={styles.logoText}>Add Logo</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Team Name *</Text>
                 <View style={styles.inputWrapper}>
@@ -90,84 +194,74 @@ const CreateTeamScreen: React.FC = () => {
                     style={styles.input}
                     placeholder="Enter team name"
                     placeholderTextColor={Colors.textSecondary}
-                    value={formData.name}
-                    onChangeText={(text) => handleInputChange('name', text)}
+                    value={formData.TeamName}
+                    onChangeText={(text) => handleInputChange('TeamName', text)}
                   />
                 </View>
               </View>
 
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Description *</Text>
-                <View style={styles.textAreaWrapper}>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="document-text-outline" size={20} color={Colors.textSecondary} style={{ alignSelf: 'flex-start', marginTop: 4 }} />
                   <TextInput
-                    style={styles.textArea}
+                    style={[styles.input, styles.textArea]}
                     placeholder="Describe your team's mission and goals..."
                     placeholderTextColor={Colors.textSecondary}
-                    value={formData.description}
-                    onChangeText={(text) => handleInputChange('description', text)}
+                    value={formData.TeamDescription}
+                    onChangeText={(text) => handleInputChange('TeamDescription', text)}
                     multiline
                     numberOfLines={4}
                   />
                 </View>
               </View>
 
+              {/* Tech Stack Selection */}
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Category</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.categoryContainer}>
-                    {categories.map((category, index) => (
-                      <TouchableOpacity
-                        key={index}
-                        style={[
-                          styles.categoryChip,
-                          formData.category === category && styles.categoryChipSelected
-                        ]}
-                        onPress={() => handleInputChange('category', category)}
-                      >
-                        <Text
-                          style={[
-                            styles.categoryText,
-                            formData.category === category && styles.categoryTextSelected
-                          ]}
-                        >
-                          {category}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </ScrollView>
-              </View>
-
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Max Members</Text>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="person-add-outline" size={20} color={Colors.textSecondary} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="10"
-                    placeholderTextColor={Colors.textSecondary}
-                    value={formData.maxMembers}
-                    onChangeText={(text) => handleInputChange('maxMembers', text)}
-                    keyboardType="numeric"
-                  />
+                <Text style={styles.inputLabel}>Tech Stack</Text>
+                <View style={styles.chipContainer}>
+                  {techStackOptions.map((tech, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.chip,
+                        formData.techStack.includes(tech) && styles.chipSelected
+                      ]}
+                      onPress={() => handleTechStackToggle(tech)}
+                    >
+                      <Text style={[
+                        styles.chipText,
+                        formData.techStack.includes(tech) && styles.chipTextSelected
+                      ]}>
+                        {tech}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
 
-              <View style={styles.switchContainer}>
-                <TouchableOpacity
-                  style={styles.switchRow}
-                  onPress={() => handleInputChange('isPrivate', (!formData.isPrivate).toString())}
-                >
-                  <View style={styles.switchInfo}>
-                    <Text style={styles.switchTitle}>Private Team</Text>
-                    <Text style={styles.switchDescription}>
-                      Require approval to join
-                    </Text>
-                  </View>
-                  <View style={[styles.switch, formData.isPrivate && styles.switchActive]}>
-                    <View style={[styles.switchThumb, formData.isPrivate && styles.switchThumbActive]} />
-                  </View>
-                </TouchableOpacity>
+              {/* Interests Selection */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Interests</Text>
+                <View style={styles.chipContainer}>
+                  {interestOptions.map((interest, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.chip,
+                        formData.interests.includes(interest) && styles.chipSelected
+                      ]}
+                      onPress={() => handleInterestToggle(interest)}
+                    >
+                      <Text style={[
+                        styles.chipText,
+                        formData.interests.includes(interest) && styles.chipTextSelected
+                      ]}>
+                        {interest}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
 
               <CyberButton
@@ -189,7 +283,7 @@ const CreateTeamScreen: React.FC = () => {
             </GlassCard>
           </ScrollView>
         </KeyboardAvoidingView>
-      </LinearGradient>
+      </View>
     </SafeAreaView>
   );
 };
@@ -197,6 +291,7 @@ const CreateTeamScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000000',
   },
   content: {
     flex: 1,
@@ -207,6 +302,34 @@ const styles = StyleSheet.create({
   formCard: {
     padding: 24,
     marginBottom: 20,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  logoButton: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 2,
+    borderColor: 'rgba(34, 211, 238, 0.3)',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoImage: {
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+  },
+  logoPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    marginTop: 8,
   },
   inputContainer: {
     marginBottom: 20,
@@ -233,25 +356,19 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginLeft: 12,
   },
-  textAreaWrapper: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
   textArea: {
-    fontSize: 16,
-    color: Colors.text,
-    textAlignVertical: 'top',
     minHeight: 80,
+    textAlignVertical: 'top',
   },
-  categoryContainer: {
+  createButton: {
+    marginTop: 8,
+  },
+  chipContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  categoryChip: {
+  chip: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 20,
     paddingHorizontal: 16,
@@ -259,61 +376,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  categoryChipSelected: {
+  chipSelected: {
     backgroundColor: 'rgba(34, 211, 238, 0.2)',
-    borderColor: Colors.primary,
+    borderColor: '#22d3ee',
   },
-  categoryText: {
-    fontSize: 12,
+  chipText: {
     color: Colors.textSecondary,
+    fontSize: 12,
     fontWeight: '500',
   },
-  categoryTextSelected: {
-    color: Colors.primary,
-  },
-  switchContainer: {
-    marginBottom: 24,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  switchInfo: {
-    flex: 1,
-  },
-  switchTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  switchDescription: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  switch: {
-    width: 50,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 2,
-    justifyContent: 'center',
-  },
-  switchActive: {
-    backgroundColor: Colors.primary,
-  },
-  switchThumb: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.text,
-  },
-  switchThumbActive: {
-    transform: [{ translateX: 22 }],
-  },
-  createButton: {
-    marginTop: 8,
+  chipTextSelected: {
+    color: '#22d3ee',
   },
   tipsCard: {
     padding: 20,

@@ -1,6 +1,6 @@
 import React from 'react';
-import AddProjectScreen from '../screens/projects/AddProjectScreen';
+import CreateProjectScreen from '../screens/projects/CreateProjectScreen';
 
 export default function CreateProject() {
-  return <AddProjectScreen />;
+  return <CreateProjectScreen />;
 }

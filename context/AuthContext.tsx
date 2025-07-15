@@ -1,9 +1,8 @@
+import { API_URL } from '@/constants/url';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { router } from 'expo-router';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-
-const API_URL = 'https://0023edba1c90.ngrok-free.app/api/v1';
 
 interface User {
   _id: string;
@@ -85,7 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Call backend logout endpoint to invalidate server-side session with timeout
       try {
         console.log('Attempting server logout...');
-        const logoutPromise = axios.post(`${API_URL}/auth/logout`);
+        const logoutPromise = axios.post(`${API_URL}/api/v1/auth/logout`);
         const timeoutPromise = new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Logout timeout')), 5000)
         );
@@ -194,7 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshUserToken = async () => {
     try {
-      const response = await axios.put(`${API_URL}/auth/refresh`);
+      const response = await axios.put(`${API_URL}/api/v1/auth/refresh`);
       const { accessToken, refreshToken } = response.data.data;
 
       // Update user in storage with new tokens

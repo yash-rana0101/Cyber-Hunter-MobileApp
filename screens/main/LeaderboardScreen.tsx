@@ -1,145 +1,620 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React from 'react';
+import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    Dimensions,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Image,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import UserProfileAvatar from '../../components/ui/UserProfileAvatar';
+import Reanimated, {
+  FadeInLeft,
+  FadeInUp,
+  SlideInDown,
+  SlideInLeft,
+  SlideInRight,
+  SlideInUp,
+  ZoomIn
+} from 'react-native-reanimated';
+import MainScreenHeader from '../../components/ui/MainScreenHeader';
+import MultiSelectInput from '../../components/ui/MultiSelectInput';
+import {
+  LeaderboardFilters,
+  LeaderboardParams,
+  LeaderboardResponse,
+  leaderboardService,
+  LeaderboardTeam,
+  LeaderboardUser
+} from '../../services/leaderboard';
 
 const { width } = Dimensions.get('window');
 
 const LeaderboardScreen: React.FC = () => {
-  const topThree = [
-    { rank: 1, name: 'Alex Chen', points: 2847, avatar: '👨‍💻', crown: '#FFD700' },
-    { rank: 2, name: 'Sarah Kim', points: 2691, avatar: '👩‍💻', crown: '#C0C0C0' },
-    { rank: 3, name: 'Mike Rodriguez', points: 2534, avatar: '👨‍🔬', crown: '#CD7F32' },
-  ];
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardResponse | null>(null);
+  const [filters, setFilters] = useState<LeaderboardFilters | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Filter states
+  const [selectedType, setSelectedType] = useState<'individual' | 'team'>('individual');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTechStack, setSelectedTechStack] = useState<{ id: string; content: string }[]>([]);
+  const [selectedLanguages, setSelectedLanguages] = useState<{ id: string; content: string }[]>([]);
+  const [selectedTags, setSelectedTags] = useState<{ id: string; content: string }[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  // Animation values
+  const fadeAnim = useMemo(() => new Animated.Value(0), []);
+  const slideAnim = useMemo(() => new Animated.Value(50), []);
+  const scaleAnim = useMemo(() => new Animated.Value(0.8), []);
+  const rotateAnim = useMemo(() => new Animated.Value(0), []);
 
-  const leaderboardData = [
-    { rank: 4, name: 'Emma Wilson', points: 2387, avatar: '👩‍🚀', status: 'up' },
-    { rank: 5, name: 'David Park', points: 2254, avatar: '👨‍⚡', status: 'down' },
-    { rank: 6, name: 'Lisa Zhang', points: 2198, avatar: '👩‍🔬', status: 'up' },
-    { rank: 7, name: 'James Cooper', points: 2156, avatar: '👨‍💼', status: 'same' },
-    { rank: 8, name: 'Maria Santos', points: 2089, avatar: '👩‍💻', status: 'up' },
-    { rank: 9, name: 'Ryan Lee', points: 1987, avatar: '👨‍🎨', status: 'down' },
-    { rank: 10, name: 'Nina Patel', points: 1923, avatar: '👩‍⚡', status: 'up' },
-  ];
+  // Initialize animations
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 10000,
+          useNativeDriver: true,
+        })
+      ),
+    ]).start();
+  }, [fadeAnim, slideAnim, scaleAnim, rotateAnim]);
 
-  const stats = [
-    { label: 'Your Rank', value: '#15', icon: 'trophy' },
-    { label: 'Your Points', value: '1,756', icon: 'star' },
-    { label: 'This Week', value: '+124', icon: 'trending-up' },
-    { label: 'Global Users', value: '12.3K', icon: 'globe' },
-  ];
+  // Fetch leaderboard data
+  const fetchLeaderboard = useCallback(async (showLoading = true) => {
+    try {
+      if (showLoading) {
+        setLoading(true);
+      }
+      setError(null);
 
-  const renderFloatingOrbs = () => (
-    <>
-      <View style={[styles.floatingOrb, styles.orb1]} />
-      <View style={[styles.floatingOrb, styles.orb2]} />
-      <View style={[styles.floatingOrb, styles.orb3]} />
-    </>
+      const params: LeaderboardParams = {
+        type: selectedType,
+        page: currentPage,
+        limit: 20,
+      };
+
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
+      if (selectedTechStack.length > 0) {
+        params.techStack = selectedTechStack.map(tech => tech.content).join(',');
+      }
+      if (selectedLanguages.length > 0) {
+        params.language = selectedLanguages.map(lang => lang.content).join(',');
+      }
+      if (selectedTags.length > 0) {
+        params.tag = selectedTags.map(tag => tag.content).join(',');
+      }
+
+      const [leaderboardRes, filtersRes] = await Promise.all([
+        leaderboardService.getLeaderboard(params),
+        filters ? Promise.resolve(filters) : leaderboardService.getFilters()
+      ]);
+
+      setLeaderboardData(leaderboardRes);
+      if (!filters) {
+        setFilters(filtersRes);
+      }
+    } catch (err) {
+      console.error('Error fetching leaderboard:', err);
+      setError('Failed to load leaderboard data');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [selectedType, searchQuery, selectedTechStack, selectedLanguages, selectedTags, currentPage, filters]);
+
+  // Initial load
+  useEffect(() => {
+    fetchLeaderboard();
+  }, [fetchLeaderboard]);
+
+  // Refresh handler
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setCurrentPage(1);
+    fetchLeaderboard(false);
+  }, [fetchLeaderboard]);
+
+  // Filter handlers
+  const handleTypeChange = (type: 'individual' | 'team') => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedType(type);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    setCurrentPage(1);
+  };
+
+  // Convert filter data to options format for MultiSelectInput
+  const getTechStackOptions = () => {
+    if (!filters) return [];
+    return filters.techStacks.map((tech: string) => ({
+      id: tech,
+      content: tech
+    }));
+  };
+
+  const getLanguageOptions = () => {
+    if (!filters) return [];
+    return filters.languages.map((lang: string) => ({
+      id: lang,
+      content: lang
+    }));
+  };
+
+  const getTagOptions = () => {
+    if (!filters) return [];
+    return filters.tags.map((tag: string) => ({
+      id: tag,
+      content: tag
+    }));
+  };
+
+  // Handler for multiselect changes
+  const handleTechStackChange = (selected: { id: string; content: string }[]) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedTechStack(selected);
+    setCurrentPage(1);
+  };
+
+  const handleLanguagesChange = (selected: { id: string; content: string }[]) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedLanguages(selected);
+    setCurrentPage(1);
+  };
+
+  const handleTagsChange = (selected: { id: string; content: string }[]) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedTags(selected);
+    setCurrentPage(1);
+  };
+
+  const renderFloatingOrbs = () => {
+    const spin = rotateAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0deg', '360deg'],
+    });
+
+    return (
+      <>
+        <Animated.View 
+          style={[
+            styles.floatingOrb, 
+            styles.orb1,
+            {
+              transform: [{ rotate: spin }],
+            }
+          ]} 
+        />
+        <Animated.View 
+          style={[
+            styles.floatingOrb, 
+            styles.orb2,
+            {
+              transform: [{ rotate: spin }],
+            }
+          ]} 
+        />
+        <Animated.View 
+          style={[
+            styles.floatingOrb, 
+            styles.orb3,
+            {
+              transform: [{ rotate: spin }],
+            }
+          ]} 
+        />
+      </>
+    );
+  };
+
+  const renderTypeToggle = () => (
+    <Reanimated.View 
+      entering={SlideInDown.delay(300).duration(800)}
+      style={styles.typeToggleContainer}
+    >
+      <View style={styles.typeToggle}>
+        <TouchableOpacity
+          style={[styles.toggleButton, selectedType === 'individual' && styles.activeToggleButton]}
+          onPress={() => handleTypeChange('individual')}
+        >
+          <Text style={[styles.toggleButtonText, selectedType === 'individual' && styles.activeToggleText]}>
+            Individual
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleButton, selectedType === 'team' && styles.activeToggleButton]}
+          onPress={() => handleTypeChange('team')}
+        >
+          <Text style={[styles.toggleButtonText, selectedType === 'team' && styles.activeToggleText]}>
+            Teams
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </Reanimated.View>
   );
 
-  const renderTopThreeCard = (user: any, index: number) => (
-    <View key={user.rank} style={[styles.topThreeCard, index === 0 && styles.winnerCard]}>
-      <View style={styles.crownContainer}>
-        <Text style={[styles.crown, { color: user.crown }]}>👑</Text>
+  const renderSearchBar = () => (
+    <Reanimated.View 
+      entering={SlideInLeft.delay(400).duration(800)}
+      style={styles.searchContainer}
+    >
+      <View style={styles.searchBar}>
+        <Ionicons name="search" size={20} color="#9CA3AF" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={`Search ${selectedType === 'individual' ? 'users' : 'teams'}...`}
+          placeholderTextColor="#9CA3AF"
+          value={searchQuery}
+          onChangeText={handleSearchChange}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => handleSearchChange('')}>
+            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
       </View>
-      <View style={[styles.avatarContainer, { borderColor: user.crown }]}>
-        <Text style={styles.avatar}>{user.avatar}</Text>
-      </View>
-      <Text style={styles.topThreeName}>{user.name}</Text>
-      <Text style={styles.topThreePoints}>{user.points.toLocaleString()}</Text>
-      <View style={[styles.rankBadge, { backgroundColor: user.crown + '40' }]}>
-        <Text style={styles.rankText}>#{user.rank}</Text>
-      </View>
+    </Reanimated.View>
+  );
+
+  const renderFilters = () => {
+    if (!filters) return null;
+
+    return (
+      <Reanimated.View 
+        entering={SlideInRight.delay(500).duration(800)}
+        style={styles.filtersContainer}
+      >
+        <Text style={styles.filtersTitle}>Filters</Text>
+        
+        {/* Tech Stack Filter */}
+        <View style={styles.filterGroup}>
+          <Text style={styles.filterLabel}>Tech Stack</Text>
+          <MultiSelectInput
+            fieldName="Tech Stack"
+            placeholder="Select tech stacks..."
+            options={getTechStackOptions()}
+            selectedValues={selectedTechStack}
+            onSelectionChange={handleTechStackChange}
+            maxSelections={5}
+            containerStyle={styles.multiSelectContainer}
+          />
+        </View>
+
+        {/* Language Filter */}
+        <View style={styles.filterGroup}>
+          <Text style={styles.filterLabel}>Programming Languages</Text>
+          <MultiSelectInput
+            fieldName="Language"
+            placeholder="Select languages..."
+            options={getLanguageOptions()}
+            selectedValues={selectedLanguages}
+            onSelectionChange={handleLanguagesChange}
+            maxSelections={5}
+            containerStyle={styles.multiSelectContainer}
+          />
+        </View>
+
+        {/* Tag Filter */}
+        <View style={styles.filterGroup}>
+          <Text style={styles.filterLabel}>Tags</Text>
+          <MultiSelectInput
+            fieldName="Tag"
+            placeholder="Select tags..."
+            options={getTagOptions()}
+            selectedValues={selectedTags}
+            onSelectionChange={handleTagsChange}
+            maxSelections={5}
+            containerStyle={styles.multiSelectContainer}
+          />
+        </View>
+      </Reanimated.View>
+    );
+  };
+
+  const renderTopThreeCard = (user: LeaderboardUser | LeaderboardTeam, index: number) => {
+    const isUser = 'email' in user;
+    const crownColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+    const crownColor = crownColors[index] || '#9CA3AF';
+    const userId = isUser ? (user as LeaderboardUser).userId : (user as LeaderboardTeam).teamId;
+
+    return (
+      <Reanimated.View 
+        key={userId}
+        entering={ZoomIn.delay(600 + index * 100).duration(800)}
+        style={[styles.topThreeCard, index === 0 && styles.winnerCard]}
+      >
+        <View style={styles.crownContainer}>
+          <Text style={[styles.crown, { color: crownColor }]}>👑</Text>
+        </View>
+        
+        <View style={[styles.avatarContainer, { borderColor: crownColor }]}>
+          {isUser && (user as LeaderboardUser).profilePicture ? (
+            <Image source={{ uri: (user as LeaderboardUser).profilePicture }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatar}>
+              {user.name.charAt(0).toUpperCase()}
+            </Text>
+          )}
+        </View>
+        
+        <Text style={styles.topThreeName} numberOfLines={1}>
+          {user.name}
+        </Text>
+        
+        <Text style={styles.topThreePoints}>
+          {user.points.toLocaleString()}
+        </Text>
+        
+        <View style={[styles.rankBadge, { backgroundColor: crownColor + '40' }]}>
+          <Text style={styles.rankText}>#{user.rank}</Text>
+        </View>
+        
+        {isUser && (
+          <View style={styles.userMeta}>
+            <Text style={styles.userMetaText}>{(user as LeaderboardUser).techStack}</Text>
+            <Text style={styles.userMetaText}>{(user as LeaderboardUser).language}</Text>
+          </View>
+        )}
+        
+        {!isUser && (
+          <View style={styles.teamMeta}>
+            <Text style={styles.teamMetaText}>{(user as LeaderboardTeam).members} members</Text>
+          </View>
+        )}
+      </Reanimated.View>
+    );
+  };
+
+  const renderLeaderboardItem = (user: LeaderboardUser | LeaderboardTeam, index: number) => {
+    const isUser = 'email' in user;
+    const animationDelay = 700 + index * 50;
+    const userId = isUser ? (user as LeaderboardUser).userId : (user as LeaderboardTeam).teamId;
+
+    return (
+      <Reanimated.View 
+        key={userId}
+        entering={FadeInUp.delay(animationDelay).duration(600)}
+      >
+        <TouchableOpacity style={styles.leaderboardItem}>
+          <LinearGradient
+            colors={[
+              'rgba(31, 41, 55, 0.8)',
+              'rgba(31, 41, 55, 0.6)',
+              'rgba(31, 41, 55, 0.4)',
+            ]}
+            style={styles.leaderboardItemGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <View style={styles.rankContainer}>
+              <Text style={styles.rankNumber}>#{user.rank}</Text>
+            </View>
+            
+            <View style={styles.userAvatar}>
+              {isUser && (user as LeaderboardUser).profilePicture ? (
+                <Image source={{ uri: (user as LeaderboardUser).profilePicture }} style={styles.avatarImageSmall} />
+              ) : (
+                <Text style={styles.avatarEmoji}>
+                  {user.name.charAt(0).toUpperCase()}
+                </Text>
+              )}
+            </View>
+            
+            <View style={styles.userInfo}>
+              <Text style={styles.userName} numberOfLines={1}>
+                {user.name}
+              </Text>
+              <Text style={styles.userPoints}>
+                {user.points.toLocaleString()} pts
+              </Text>
+              {isUser && (
+                <Text style={styles.userTech} numberOfLines={1}>
+                  {(user as LeaderboardUser).techStack} • {(user as LeaderboardUser).language}
+                </Text>
+              )}
+              {!isUser && (
+                <Text style={styles.teamInfo}>
+                  {(user as LeaderboardTeam).members} members
+                </Text>
+              )}
+            </View>
+            
+            <View style={styles.statusContainer}>
+              <Ionicons 
+                name="chevron-forward" 
+                size={16} 
+                color="#9CA3AF" 
+              />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Reanimated.View>
+    );
+  };
+
+  const renderStats = () => {
+    if (!leaderboardData || leaderboardData.results.length === 0) return null;
+
+    const stats = [
+      { label: 'Total Entries', value: leaderboardData.pagination.totalCount.toString(), icon: 'people' },
+      { label: 'Current Page', value: leaderboardData.pagination.page.toString(), icon: 'document' },
+      { label: 'Top Score', value: leaderboardData.topThree[0]?.points.toLocaleString() || '0', icon: 'trophy' },
+      { label: 'Competition', value: selectedType === 'individual' ? 'Individual' : 'Team', icon: 'flag' },
+    ];
+
+    return (
+      <Reanimated.View 
+        entering={FadeInLeft.delay(200).duration(800)}
+        style={styles.statsContainer}
+      >
+        {stats.map((stat, index) => (
+          <Reanimated.View 
+            key={index}
+            entering={SlideInUp.delay(300 + index * 100).duration(600)}
+            style={styles.statCard}
+          >
+            <View style={styles.statIconContainer}>
+              <Ionicons name={stat.icon as any} size={20} color="#22d3ee" />
+            </View>
+            <Text style={styles.statLabel}>{stat.label}</Text>
+            <Text style={styles.statValue}>{stat.value}</Text>
+          </Reanimated.View>
+        ))}
+      </Reanimated.View>
+    );
+  };
+
+  const renderLoadingState = () => (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color="#22d3ee" />
+      <Text style={styles.loadingText}>Loading leaderboard...</Text>
     </View>
   );
 
-  const renderLeaderboardItem = (user: any) => (
-    <TouchableOpacity key={user.rank} style={styles.leaderboardItem}>
-      <View style={styles.rankContainer}>
-        <Text style={styles.rankNumber}>#{user.rank}</Text>
-      </View>
-      <View style={styles.userAvatar}>
-        <Text style={styles.avatarEmoji}>{user.avatar}</Text>
-      </View>
-      <View style={styles.userInfo}>
-        <Text style={styles.userName}>{user.name}</Text>
-        <Text style={styles.userPoints}>{user.points.toLocaleString()} pts</Text>
-      </View>
-      <View style={styles.statusContainer}>
-        <Ionicons 
-          name={user.status === 'up' ? 'chevron-up' : user.status === 'down' ? 'chevron-down' : 'remove'} 
-          size={16} 
-          color={user.status === 'up' ? '#10B981' : user.status === 'down' ? '#EF4444' : '#9CA3AF'} 
-        />
-      </View>
-    </TouchableOpacity>
+  const renderErrorState = () => (
+    <View style={styles.errorContainer}>
+      <Ionicons name="warning" size={48} color="#EF4444" />
+      <Text style={styles.errorText}>{error}</Text>
+      <TouchableOpacity style={styles.retryButton} onPress={() => fetchLeaderboard()}>
+        <Text style={styles.retryButtonText}>Retry</Text>
+      </TouchableOpacity>
+    </View>
   );
 
-  const renderStatCard = (stat: any, index: number) => (
-    <View key={index} style={styles.statCard}>
-      <View style={styles.statIconContainer}>
-        <Ionicons name={stat.icon as any} size={20} color="#22d3ee" />
-      </View>
-      <Text style={styles.statLabel}>{stat.label}</Text>
-      <Text style={styles.statValue}>{stat.value}</Text>
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="trophy" size={48} color="#9CA3AF" />
+      <Text style={styles.emptyText}>No leaderboard data available</Text>
+      <Text style={styles.emptySubText}>
+        Be the first to earn points and climb the leaderboard!
+      </Text>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
       {renderFloatingOrbs()}
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#22d3ee']}
+            tintColor="#22d3ee"
+          />
+        }
+      >
         {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <UserProfileAvatar size="medium" />
-            
-            <TouchableOpacity 
-              style={styles.notificationButton}
-              onPress={() => router.push('/notifications')}
-            >
-              <Ionicons name="notifications" size={24} color="#22d3ee" />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>3</Text>
+        <Animated.View style={[styles.headerContainer, { opacity: fadeAnim }]}>
+          <MainScreenHeader
+            title="LEADERBOARD"
+            subtitle="Top cyber hunters compete here"
+            showProfileButton={true}
+            showNotificationButton={true}
+            notificationCount={3}
+          />
+        </Animated.View>
+
+        {/* Type Toggle */}
+        {renderTypeToggle()}
+
+        {/* Search Bar */}
+        {renderSearchBar()}
+
+        {/* Filters */}
+        {renderFilters()}
+
+        {/* Content */}
+        {loading ? (
+          renderLoadingState()
+        ) : error ? (
+          renderErrorState()
+        ) : !leaderboardData || leaderboardData.results.length === 0 ? (
+          renderEmptyState()
+        ) : (
+          <>
+            {/* Stats */}
+            {renderStats()}
+
+            {/* Top 3 Podium */}
+            {leaderboardData.topThree.length > 0 && (
+              <View style={styles.sectionContainer}>
+                <Reanimated.Text 
+                  entering={FadeInLeft.delay(600).duration(800)}
+                  style={styles.sectionTitle}
+                >
+                  🏆 Hall of Fame
+                </Reanimated.Text>
+                <View style={styles.topThreeContainer}>
+                  {leaderboardData.topThree.map(renderTopThreeCard)}
+                </View>
               </View>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>LEADERBOARD</Text>
-            <Text style={styles.subtitle}>Top cyber hunters</Text>
-          </View>
-        </View>
+            )}
 
-        {/* Your Stats */}
-        <View style={styles.statsContainer}>
-          {stats.map((stat, index) => renderStatCard(stat, index))}
-        </View>
+            {/* Full Leaderboard */}
+            <View style={styles.sectionContainer}>
+              <Reanimated.Text 
+                entering={FadeInLeft.delay(800).duration(800)}
+                style={styles.sectionTitle}
+              >
+                📊 Full Rankings
+              </Reanimated.Text>
+              <View style={styles.leaderboardContainer}>
+                {leaderboardData.results.map(renderLeaderboardItem)}
+              </View>
+            </View>
 
-        {/* Top 3 Podium */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Hall of Fame</Text>
-          <View style={styles.topThreeContainer}>
-            {topThree.map((user, index) => renderTopThreeCard(user, index))}
-          </View>
-        </View>
-
-        {/* Full Leaderboard */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Full Rankings</Text>
-          <View style={styles.leaderboardContainer}>
-            {leaderboardData.map(renderLeaderboardItem)}
-          </View>
-        </View>
+            {/* Pagination Info */}
+            {leaderboardData.pagination.totalPages > 1 && (
+              <Reanimated.View 
+                entering={FadeInUp.delay(1000).duration(800)}
+                style={styles.paginationContainer}
+              >
+                <Text style={styles.paginationText}>
+                  Page {leaderboardData.pagination.page} of {leaderboardData.pagination.totalPages}
+                </Text>
+                <Text style={styles.paginationSubText}>
+                  Showing {leaderboardData.results.length} of {leaderboardData.pagination.totalCount} entries
+                </Text>
+              </Reanimated.View>
+            )}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -154,183 +629,165 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
   },
+  headerContainer: {
+    marginBottom: 20,
+  },
+  // Floating orbs
   floatingOrb: {
     position: 'absolute',
-    borderRadius: 500,
-    backgroundColor: 'rgba(0, 216, 255, 0.1)',
+    borderRadius: 50,
+    backgroundColor: 'rgba(34, 211, 238, 0.1)',
   },
   orb1: {
-    width: 150,
-    height: 150,
-    top: 150,
+    width: 100,
+    height: 100,
+    top: 100,
     right: -50,
   },
   orb2: {
-    width: 200,
-    height: 200,
-    bottom: 300,
-    left: -80,
-    backgroundColor: 'rgba(34, 211, 238, 0.08)',
+    width: 80,
+    height: 80,
+    top: 300,
+    left: -40,
   },
   orb3: {
-    width: 120,
-    height: 120,
-    top: 400,
-    left: width - 80,
-    backgroundColor: 'rgba(236, 38, 143, 0.06)',
+    width: 60,
+    height: 60,
+    top: 500,
+    right: 20,
   },
-  header: {
-    paddingTop: 24,
-    paddingBottom: 28,
-    paddingHorizontal: 4,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  // Type toggle
+  typeToggleContainer: {
     marginBottom: 20,
   },
-  profileButton: {
-    padding: 6,
-    borderRadius: 24,
-  },
-  profileAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(31, 41, 55, 0.8)',
-    borderWidth: 2,
-    borderColor: '#22d3ee',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#22d3ee',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 6,
-  },
-  profileAvatarText: {
-    fontSize: 22,
-  },
-  notificationButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(31, 41, 55, 0.8)',
+  typeToggle: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(31, 41, 55, 0.6)',
+    borderRadius: 15,
+    padding: 4,
     borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.5)',
-    justifyContent: 'center',
+    borderColor: 'rgba(34, 211, 238, 0.3)',
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
   },
-  notificationBadge: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
+  activeToggleButton: {
+    backgroundColor: '#22d3ee',
+  },
+  toggleButtonText: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activeToggleText: {
+    color: '#0f0f23',
+  },
+  // Search bar
+  searchContainer: {
+    marginBottom: 20,
+  },
+  searchBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#000000',
+    backgroundColor: 'rgba(31, 41, 55, 0.6)',
+    borderRadius: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.3)',
   },
-  notificationBadgeText: {
+  searchInput: {
+    flex: 1,
+    marginLeft: 10,
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  headerContent: {
-    alignItems: 'flex-start',
-    paddingHorizontal: 4,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginBottom: 6,
-    letterSpacing: 1.2,
-    textShadowColor: 'rgba(34, 211, 238, 0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  subtitle: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#22d3ee',
-    opacity: 0.9,
   },
+  // Filters
+  filtersContainer: {
+    marginBottom: 20,
+  },
+  filtersTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  filterGroup: {
+    marginBottom: 15,
+  },
+  filterLabel: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  multiSelectContainer: {
+    marginBottom: 8,
+  },
+  // Stats
   statsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 32,
-    gap: 12,
+    justifyContent: 'space-between',
+    marginBottom: 30,
   },
   statCard: {
     backgroundColor: 'rgba(31, 41, 55, 0.6)',
-    borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.5)',
-    borderRadius: 16,
-    padding: 16,
-    width: (width - 44) / 2,
+    borderRadius: 15,
+    padding: 15,
     alignItems: 'center',
+    width: '48%',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.3)',
   },
   statIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(34, 211, 238, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 8,
   },
   statLabel: {
-    fontSize: 12,
     color: '#9CA3AF',
+    fontSize: 12,
     marginBottom: 4,
-    textAlign: 'center',
   },
   statValue: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#22d3ee',
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
+  // Sections
   sectionContainer: {
-    marginBottom: 32,
+    marginBottom: 30,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
     color: '#FFFFFF',
-    marginBottom: 16,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
   },
+  // Top three
   topThreeContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
+    justifyContent: 'space-around',
+    marginBottom: 20,
   },
   topThreeCard: {
     backgroundColor: 'rgba(31, 41, 55, 0.8)',
-    borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.5)',
-    borderRadius: 16,
-    padding: 16,
-    flex: 1,
+    borderRadius: 20,
+    padding: 15,
     alignItems: 'center',
-    minHeight: 180,
+    width: width * 0.28,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.3)',
   },
   winnerCard: {
-    borderColor: 'rgba(255, 215, 0, 0.5)',
-    backgroundColor: 'rgba(255, 215, 0, 0.05)',
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
   },
   crownContainer: {
-    marginBottom: 8,
+    marginBottom: 10,
   },
   crown: {
     fontSize: 24,
@@ -342,84 +799,197 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
-    backgroundColor: 'rgba(31, 41, 55, 0.8)',
+    marginBottom: 10,
+  },
+  avatarImage: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
   },
   avatar: {
+    color: '#FFFFFF',
     fontSize: 24,
+    fontWeight: 'bold',
   },
   topThreeName: {
-    fontSize: 14,
-    fontWeight: '600',
     color: '#FFFFFF',
-    marginBottom: 4,
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 5,
     textAlign: 'center',
   },
   topThreePoints: {
-    fontSize: 16,
-    fontWeight: '700',
     color: '#22d3ee',
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
   },
   rankBadge: {
+    borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    marginBottom: 10,
   },
   rankText: {
-    fontSize: 12,
-    fontWeight: '600',
     color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
+  userMeta: {
+    alignItems: 'center',
+  },
+  userMetaText: {
+    color: '#9CA3AF',
+    fontSize: 10,
+    textAlign: 'center',
+  },
+  teamMeta: {
+    alignItems: 'center',
+  },
+  teamMetaText: {
+    color: '#9CA3AF',
+    fontSize: 10,
+    textAlign: 'center',
+  },
+  // Leaderboard items
   leaderboardContainer: {
-    gap: 8,
+    marginBottom: 20,
   },
   leaderboardItem: {
-    backgroundColor: 'rgba(31, 41, 55, 0.6)',
-    borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.5)',
-    borderRadius: 12,
-    padding: 16,
+    marginBottom: 10,
+    borderRadius: 15,
+    overflow: 'hidden',
+  },
+  leaderboardItemGradient: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.3)',
+    borderRadius: 15,
   },
   rankContainer: {
-    width: 40,
-    alignItems: 'center',
+    marginRight: 15,
   },
   rankNumber: {
+    color: '#22d3ee',
     fontSize: 16,
-    fontWeight: '600',
-    color: '#9CA3AF',
+    fontWeight: 'bold',
   },
   userAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(55, 65, 81, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 12,
+    marginRight: 15,
+    backgroundColor: 'rgba(34, 211, 238, 0.2)',
+  },
+  avatarImageSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   avatarEmoji: {
-    fontSize: 20,
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   userInfo: {
     flex: 1,
   },
   userName: {
-    fontSize: 16,
-    fontWeight: '600',
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
     marginBottom: 2,
   },
   userPoints: {
-    fontSize: 12,
+    color: '#22d3ee',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  userTech: {
     color: '#9CA3AF',
+    fontSize: 12,
+  },
+  teamInfo: {
+    color: '#9CA3AF',
+    fontSize: 12,
   },
   statusContainer: {
-    width: 24,
+    marginLeft: 10,
+  },
+  // States
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    color: '#9CA3AF',
+    fontSize: 16,
+    marginTop: 10,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 16,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#22d3ee',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginTop: 20,
+  },
+  retryButtonText: {
+    color: '#0f0f23',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  emptyText: {
+    color: '#9CA3AF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  emptySubText: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  // Pagination
+  paginationContainer: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  paginationText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  paginationSubText: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    marginTop: 5,
   },
 });
 

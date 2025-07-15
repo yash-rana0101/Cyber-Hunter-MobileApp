@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
 import React from 'react';
 import {
   Alert,
@@ -14,7 +13,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import CyberButton from '../../components/ui/CyberButton';
 import GlassCard from '../../components/ui/GlassCard';
-import UserProfileAvatar from '../../components/ui/UserProfileAvatar';
+import MainScreenHeader from '../../components/ui/MainScreenHeader';
 import { Colors } from '../../constants/Colors';
 import { AppDispatch, RootState } from '../../store';
 import { resetOnboardingCompleted } from '../../store/slices/authSlice';
@@ -50,28 +49,10 @@ const DashboardScreen: React.FC = () => {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView style={styles.scrollView}>
           {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerTop}>
-              <UserProfileAvatar size="medium" />
-              
-              <View style={styles.headerActions}>
-                <TouchableOpacity 
-                  style={styles.notificationButton}
-                  onPress={() => router.push('/notifications')}
-                >
-                  <Ionicons name="notifications" size={24} color="#22d3ee" />
-                  <View style={styles.notificationBadge}>
-                    <Text style={styles.notificationBadgeText}>3</Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-            </View>
-            
-            <View style={styles.headerContent}>
-              <Text style={styles.title}>DASHBOARD</Text>
-              <Text style={styles.subtitle}>Welcome back, Hunter</Text>
-            </View>
-          </View>
+          <MainScreenHeader
+            title="DASHBOARD"
+            subtitle="Welcome back, Hunter"
+          />
 
           {/* Stats Cards */}
           <View style={styles.statsGrid}>
