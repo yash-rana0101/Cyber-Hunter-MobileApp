@@ -5,20 +5,26 @@ import { Colors } from '../constants/Colors';
 import { AuthContext } from '../context/AuthContext';
 
 export default function RootIndex() {
-  const { isAuthenticated, loading } = useContext(AuthContext);
+  const { isAuthenticated, loading, user } = useContext(AuthContext);
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return; // Wait for auth check to complete
     
     if (isAuthenticated) {
-      console.log('Redirecting to dashboard');
-      router.replace('/(tabs)');
+      // Check if user profile is complete
+      if (user && !user.isProfileComplete) {
+        console.log('User profile incomplete, redirecting to user details');
+        router.replace('/auth/user-details');
+      } else {
+        console.log('Redirecting to dashboard');
+        router.replace('/(tabs)');
+      }
     } else {
       console.log('Redirecting to login');
       router.replace('/auth/login');
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, router, user]);
 
   // Show loading screen while determining authentication status
   return (

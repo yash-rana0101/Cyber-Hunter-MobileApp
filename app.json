@@ -9,14 +9,19 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yashrana1010.cyberhunter",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.yashrana1010.cyberhunter"
     },
     "web": {
       "bundler": "metro",
@@ -38,10 +43,10 @@
     "experiments": {
       "typedRoutes": true
     },
-    "doctor": {
-      "reactNativeDirectoryCheck": {
-        "exclude": ["redux-persist"],
-        "listUnknownPackages": false
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c3e3c5f7-5aa3-4fdb-a16a-662b3ee62578"
       }
     }
   }

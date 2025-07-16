@@ -12,6 +12,7 @@ interface User {
   accessToken?: string;
   refreshToken?: string;
   twoFactorEnabled?: boolean;
+  isProfileComplete?: boolean;
   // Add any other user properties you need
 }
 

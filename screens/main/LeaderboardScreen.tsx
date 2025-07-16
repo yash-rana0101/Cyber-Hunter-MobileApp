@@ -26,7 +26,9 @@ import Reanimated, {
   ZoomIn
 } from 'react-native-reanimated';
 import MainScreenHeader from '../../components/ui/MainScreenHeader';
-import MultiSelectInput from '../../components/ui/MultiSelectInput';
+import SimpleMultiSelect from '../../components/ui/SimpleMultiSelect';
+import { useMultiSelect } from '../../hooks/useMultiSelect';
+import { filterService } from '../../services/filters';
 import {
   LeaderboardFilters,
   LeaderboardParams,
@@ -44,48 +46,44 @@ const LeaderboardScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Filter states
   const [selectedType, setSelectedType] = useState<'individual' | 'team'>('individual');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTechStack, setSelectedTechStack] = useState<{ id: string; content: string }[]>([]);
-  const [selectedLanguages, setSelectedLanguages] = useState<{ id: string; content: string }[]>([]);
-  const [selectedTags, setSelectedTags] = useState<{ id: string; content: string }[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  
+
+  // Use the hook for simpler multi-select management
+  const techStackFilter = useMultiSelect({
+    maxSelections: 10,
+  });
+
+  const languagesFilter = useMultiSelect({
+    maxSelections: 5,
+  });
+
+  const tagsFilter = useMultiSelect({
+    maxSelections: 5,
+  });
+
   // Animation values
   const fadeAnim = useMemo(() => new Animated.Value(0), []);
-  const slideAnim = useMemo(() => new Animated.Value(50), []);
-  const scaleAnim = useMemo(() => new Animated.Value(0.8), []);
-  const rotateAnim = useMemo(() => new Animated.Value(0), []);
+  const slideAnim = useMemo(() => new Animated.Value(30), []);
 
   // Initialize animations
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 1000,
+        duration: 600,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 800,
+        duration: 500,
         useNativeDriver: true,
       }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.loop(
-        Animated.timing(rotateAnim, {
-          toValue: 1,
-          duration: 10000,
-          useNativeDriver: true,
-        })
-      ),
     ]).start();
-  }, [fadeAnim, slideAnim, scaleAnim, rotateAnim]);
+  }, [fadeAnim, slideAnim]);
 
   // Fetch leaderboard data
   const fetchLeaderboard = useCallback(async (showLoading = true) => {
@@ -104,14 +102,14 @@ const LeaderboardScreen: React.FC = () => {
       if (searchQuery.trim()) {
         params.search = searchQuery.trim();
       }
-      if (selectedTechStack.length > 0) {
-        params.techStack = selectedTechStack.map(tech => tech.content).join(',');
+      if (techStackFilter.value.length > 0) {
+        params.techStack = techStackFilter.value.map(tech => tech.label).join(',');
       }
-      if (selectedLanguages.length > 0) {
-        params.language = selectedLanguages.map(lang => lang.content).join(',');
+      if (languagesFilter.value.length > 0) {
+        params.language = languagesFilter.value.map(lang => lang.label).join(',');
       }
-      if (selectedTags.length > 0) {
-        params.tag = selectedTags.map(tag => tag.content).join(',');
+      if (tagsFilter.value.length > 0) {
+        params.tag = tagsFilter.value.map(tag => tag.label).join(',');
       }
 
       const [leaderboardRes, filtersRes] = await Promise.all([
@@ -130,7 +128,7 @@ const LeaderboardScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedType, searchQuery, selectedTechStack, selectedLanguages, selectedTags, currentPage, filters]);
+  }, [selectedType, searchQuery, techStackFilter.value, languagesFilter.value, tagsFilter.value, currentPage, filters]);
 
   // Initial load
   useEffect(() => {
@@ -156,92 +154,46 @@ const LeaderboardScreen: React.FC = () => {
     setCurrentPage(1);
   };
 
-  // Convert filter data to options format for MultiSelectInput
-  const getTechStackOptions = () => {
-    if (!filters) return [];
-    return filters.techStacks.map((tech: string) => ({
-      id: tech,
-      content: tech
-    }));
-  };
-
-  const getLanguageOptions = () => {
-    if (!filters) return [];
-    return filters.languages.map((lang: string) => ({
-      id: lang,
-      content: lang
-    }));
-  };
-
-  const getTagOptions = () => {
-    if (!filters) return [];
-    return filters.tags.map((tag: string) => ({
-      id: tag,
-      content: tag
-    }));
-  };
-
-  // Handler for multiselect changes
-  const handleTechStackChange = (selected: { id: string; content: string }[]) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedTechStack(selected);
-    setCurrentPage(1);
-  };
-
-  const handleLanguagesChange = (selected: { id: string; content: string }[]) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedLanguages(selected);
-    setCurrentPage(1);
-  };
-
-  const handleTagsChange = (selected: { id: string; content: string }[]) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedTags(selected);
-    setCurrentPage(1);
-  };
-
   const renderFloatingOrbs = () => {
-    const spin = rotateAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: ['0deg', '360deg'],
-    });
-
     return (
       <>
-        <Animated.View 
+        <Animated.View
           style={[
-            styles.floatingOrb, 
+            styles.floatingOrb,
             styles.orb1,
             {
-              transform: [{ rotate: spin }],
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
             }
-          ]} 
+          ]}
         />
-        <Animated.View 
+        <Animated.View
           style={[
-            styles.floatingOrb, 
+            styles.floatingOrb,
             styles.orb2,
             {
-              transform: [{ rotate: spin }],
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
             }
-          ]} 
+          ]}
         />
-        <Animated.View 
+        <Animated.View
           style={[
-            styles.floatingOrb, 
+            styles.floatingOrb,
             styles.orb3,
             {
-              transform: [{ rotate: spin }],
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
             }
-          ]} 
+          ]}
         />
       </>
     );
   };
 
   const renderTypeToggle = () => (
-    <Reanimated.View 
-      entering={SlideInDown.delay(300).duration(800)}
+    <Reanimated.View
+      entering={SlideInDown.delay(100).duration(500)}
       style={styles.typeToggleContainer}
     >
       <View style={styles.typeToggle}>
@@ -266,8 +218,8 @@ const LeaderboardScreen: React.FC = () => {
   );
 
   const renderSearchBar = () => (
-    <Reanimated.View 
-      entering={SlideInLeft.delay(400).duration(800)}
+    <Reanimated.View
+      entering={SlideInLeft.delay(150).duration(500)}
       style={styles.searchContainer}
     >
       <View style={styles.searchBar}>
@@ -292,51 +244,119 @@ const LeaderboardScreen: React.FC = () => {
     if (!filters) return null;
 
     return (
-      <Reanimated.View 
-        entering={SlideInRight.delay(500).duration(800)}
+      <Reanimated.View
+        entering={SlideInRight.delay(200).duration(500)}
         style={styles.filtersContainer}
       >
         <Text style={styles.filtersTitle}>Filters</Text>
-        
+
+        {/* Clear Filters Button */}
+        {(techStackFilter.value.length > 0 || languagesFilter.value.length > 0 || tagsFilter.value.length > 0) && (
+          <TouchableOpacity
+            style={styles.clearFiltersButton}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              techStackFilter.reset();
+              languagesFilter.reset();
+              tagsFilter.reset();
+              setCurrentPage(1);
+            }}
+          >
+            <Ionicons name="refresh" size={16} color="#FFFFFF" />
+            <Text style={styles.clearFiltersText}>Clear Filters</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Tech Stack Filter */}
         <View style={styles.filterGroup}>
-          <Text style={styles.filterLabel}>Tech Stack</Text>
-          <MultiSelectInput
-            fieldName="Tech Stack"
-            placeholder="Select tech stacks..."
-            options={getTechStackOptions()}
-            selectedValues={selectedTechStack}
-            onSelectionChange={handleTechStackChange}
-            maxSelections={5}
-            containerStyle={styles.multiSelectContainer}
+          <SimpleMultiSelect
+            label="Tech Stack"
+            placeholder="Select tech stack..."
+            value={techStackFilter.value}
+            onChange={(selected) => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              techStackFilter.setValue(selected);
+              setCurrentPage(1);
+            }}
+            onSearch={async (query) => {
+              const results = await filterService.getTechStacks(query);
+              return results.map(item => ({
+                id: item.id,
+                label: item.content
+              }));
+            }}
+            onCreate={async (label) => {
+              const result = await filterService.createTechStack(label);
+              return {
+                id: result.id,
+                label: result.content
+              };
+            }}
+            allowCreate={true}
+            maxSelections={10}
+            style={styles.multiSelectContainer}
           />
         </View>
 
         {/* Language Filter */}
         <View style={styles.filterGroup}>
-          <Text style={styles.filterLabel}>Programming Languages</Text>
-          <MultiSelectInput
-            fieldName="Language"
+          <SimpleMultiSelect
+            label="Programming Languages"
             placeholder="Select languages..."
-            options={getLanguageOptions()}
-            selectedValues={selectedLanguages}
-            onSelectionChange={handleLanguagesChange}
+            value={languagesFilter.value}
+            onChange={(selected) => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              languagesFilter.setValue(selected);
+              setCurrentPage(1);
+            }}
+            onSearch={async (query) => {
+              const results = await filterService.getLanguages(query);
+              return results.map(item => ({
+                id: item.id,
+                label: item.content
+              }));
+            }}
+            onCreate={async (label) => {
+              const result = await filterService.createLanguage(label);
+              return {
+                id: result.id,
+                label: result.content
+              };
+            }}
+            allowCreate={true}
             maxSelections={5}
-            containerStyle={styles.multiSelectContainer}
+            style={styles.multiSelectContainer}
           />
         </View>
 
         {/* Tag Filter */}
         <View style={styles.filterGroup}>
-          <Text style={styles.filterLabel}>Tags</Text>
-          <MultiSelectInput
-            fieldName="Tag"
+          <SimpleMultiSelect
+            label="Tags"
             placeholder="Select tags..."
-            options={getTagOptions()}
-            selectedValues={selectedTags}
-            onSelectionChange={handleTagsChange}
+            value={tagsFilter.value}
+            onChange={(selected) => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              tagsFilter.setValue(selected);
+              setCurrentPage(1);
+            }}
+            onSearch={async (query) => {
+              const results = await filterService.getTags(query);
+              return results.map(item => ({
+                id: item.id,
+                label: item.content
+              }));
+            }}
+            onCreate={async (label) => {
+              const result = await filterService.createTag(label);
+              return {
+                id: result.id,
+                label: result.content
+              };
+            }}
+            allowCreate={true}
             maxSelections={5}
-            containerStyle={styles.multiSelectContainer}
+            style={styles.multiSelectContainer}
           />
         </View>
       </Reanimated.View>
@@ -350,15 +370,15 @@ const LeaderboardScreen: React.FC = () => {
     const userId = isUser ? (user as LeaderboardUser).userId : (user as LeaderboardTeam).teamId;
 
     return (
-      <Reanimated.View 
+      <Reanimated.View
         key={userId}
-        entering={ZoomIn.delay(600 + index * 100).duration(800)}
+        entering={ZoomIn.delay(250 + index * 50).duration(500)}
         style={[styles.topThreeCard, index === 0 && styles.winnerCard]}
       >
         <View style={styles.crownContainer}>
           <Text style={[styles.crown, { color: crownColor }]}>👑</Text>
         </View>
-        
+
         <View style={[styles.avatarContainer, { borderColor: crownColor }]}>
           {isUser && (user as LeaderboardUser).profilePicture ? (
             <Image source={{ uri: (user as LeaderboardUser).profilePicture }} style={styles.avatarImage} />
@@ -368,26 +388,26 @@ const LeaderboardScreen: React.FC = () => {
             </Text>
           )}
         </View>
-        
+
         <Text style={styles.topThreeName} numberOfLines={1}>
           {user.name}
         </Text>
-        
+
         <Text style={styles.topThreePoints}>
           {user.points.toLocaleString()}
         </Text>
-        
+
         <View style={[styles.rankBadge, { backgroundColor: crownColor + '40' }]}>
           <Text style={styles.rankText}>#{user.rank}</Text>
         </View>
-        
+
         {isUser && (
           <View style={styles.userMeta}>
             <Text style={styles.userMetaText}>{(user as LeaderboardUser).techStack}</Text>
             <Text style={styles.userMetaText}>{(user as LeaderboardUser).language}</Text>
           </View>
         )}
-        
+
         {!isUser && (
           <View style={styles.teamMeta}>
             <Text style={styles.teamMetaText}>{(user as LeaderboardTeam).members} members</Text>
@@ -399,13 +419,13 @@ const LeaderboardScreen: React.FC = () => {
 
   const renderLeaderboardItem = (user: LeaderboardUser | LeaderboardTeam, index: number) => {
     const isUser = 'email' in user;
-    const animationDelay = 700 + index * 50;
+    const animationDelay = 300 + index * 30;
     const userId = isUser ? (user as LeaderboardUser).userId : (user as LeaderboardTeam).teamId;
 
     return (
-      <Reanimated.View 
+      <Reanimated.View
         key={userId}
-        entering={FadeInUp.delay(animationDelay).duration(600)}
+        entering={FadeInUp.delay(animationDelay).duration(400)}
       >
         <TouchableOpacity style={styles.leaderboardItem}>
           <LinearGradient
@@ -421,7 +441,7 @@ const LeaderboardScreen: React.FC = () => {
             <View style={styles.rankContainer}>
               <Text style={styles.rankNumber}>#{user.rank}</Text>
             </View>
-            
+
             <View style={styles.userAvatar}>
               {isUser && (user as LeaderboardUser).profilePicture ? (
                 <Image source={{ uri: (user as LeaderboardUser).profilePicture }} style={styles.avatarImageSmall} />
@@ -431,7 +451,7 @@ const LeaderboardScreen: React.FC = () => {
                 </Text>
               )}
             </View>
-            
+
             <View style={styles.userInfo}>
               <Text style={styles.userName} numberOfLines={1}>
                 {user.name}
@@ -450,12 +470,12 @@ const LeaderboardScreen: React.FC = () => {
                 </Text>
               )}
             </View>
-            
+
             <View style={styles.statusContainer}>
-              <Ionicons 
-                name="chevron-forward" 
-                size={16} 
-                color="#9CA3AF" 
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color="#9CA3AF"
               />
             </View>
           </LinearGradient>
@@ -475,14 +495,14 @@ const LeaderboardScreen: React.FC = () => {
     ];
 
     return (
-      <Reanimated.View 
-        entering={FadeInLeft.delay(200).duration(800)}
+      <Reanimated.View
+        entering={FadeInLeft.delay(100).duration(500)}
         style={styles.statsContainer}
       >
         {stats.map((stat, index) => (
-          <Reanimated.View 
+          <Reanimated.View
             key={index}
-            entering={SlideInUp.delay(300 + index * 100).duration(600)}
+            entering={SlideInUp.delay(150 + index * 50).duration(400)}
             style={styles.statCard}
           >
             <View style={styles.statIconContainer}>
@@ -526,9 +546,9 @@ const LeaderboardScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       {renderFloatingOrbs()}
-      
-      <ScrollView 
-        style={styles.scrollView} 
+
+      <ScrollView
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -574,8 +594,8 @@ const LeaderboardScreen: React.FC = () => {
             {/* Top 3 Podium */}
             {leaderboardData.topThree.length > 0 && (
               <View style={styles.sectionContainer}>
-                <Reanimated.Text 
-                  entering={FadeInLeft.delay(600).duration(800)}
+                <Reanimated.Text
+                  entering={FadeInLeft.delay(200).duration(500)}
                   style={styles.sectionTitle}
                 >
                   🏆 Hall of Fame
@@ -588,8 +608,8 @@ const LeaderboardScreen: React.FC = () => {
 
             {/* Full Leaderboard */}
             <View style={styles.sectionContainer}>
-              <Reanimated.Text 
-                entering={FadeInLeft.delay(800).duration(800)}
+              <Reanimated.Text
+                entering={FadeInLeft.delay(250).duration(500)}
                 style={styles.sectionTitle}
               >
                 📊 Full Rankings
@@ -601,7 +621,7 @@ const LeaderboardScreen: React.FC = () => {
 
             {/* Pagination Info */}
             {leaderboardData.pagination.totalPages > 1 && (
-              <Reanimated.View 
+              <Reanimated.View
                 entering={FadeInUp.delay(1000).duration(800)}
                 style={styles.paginationContainer}
               >
@@ -716,13 +736,24 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 15,
   },
-  filterGroup: {
+  clearFiltersButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
     marginBottom: 15,
   },
-  filterLabel: {
-    color: '#9CA3AF',
+  clearFiltersText: {
+    color: '#FFFFFF',
     fontSize: 14,
-    marginBottom: 8,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  filterGroup: {
+    marginBottom: 15,
   },
   multiSelectContainer: {
     marginBottom: 8,

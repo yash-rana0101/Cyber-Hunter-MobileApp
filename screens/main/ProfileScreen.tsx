@@ -63,7 +63,6 @@ const ProfileScreen: React.FC = () => {
   const fetchUserProfile = useCallback(async () => {
     try {
       setLoading(true);
-      console.log('Fetching user profile...');
       
       // Try to get current user first, then specific user data
       const [currentUserResponse, userResponse] = await Promise.all([
@@ -74,8 +73,6 @@ const ProfileScreen: React.FC = () => {
       const currentUserData = currentUserResponse.data.data;
       const userDetailData = userResponse?.data || {};
 
-      console.log('Current user data:', currentUserData);
-      console.log('User detail data:', userDetailData);
 
       // Combine the data
       const combinedData = {
@@ -253,11 +250,11 @@ const ProfileScreen: React.FC = () => {
   const renderFloatingOrbs = () => (
     <>
       <Animated.View 
-        entering={FadeInUp.delay(500).duration(2000)}
+        entering={FadeInUp.delay(100).duration(1200)}
         style={[styles.floatingOrb, styles.orb1]} 
       />
       <Animated.View 
-        entering={FadeInDown.delay(800).duration(2000)}
+        entering={FadeInDown.delay(200).duration(1200)}
         style={[styles.floatingOrb, styles.orb2]} 
       />
     </>
@@ -266,7 +263,7 @@ const ProfileScreen: React.FC = () => {
   const renderStatCard = (stat: any, index: number) => (
     <Animated.View 
       key={index} 
-      entering={SlideInLeft.delay(200 + index * 100).duration(800)}
+      entering={SlideInLeft.delay(100 + index * 50).duration(600)}
       style={styles.statCard}
     >
       <View style={styles.statIconContainer}>
@@ -280,7 +277,7 @@ const ProfileScreen: React.FC = () => {
   const renderSkillTag = (skill: any, index: number) => (
     <Animated.View 
       key={index} 
-      entering={SlideInRight.delay(300 + index * 50).duration(600)}
+      entering={SlideInRight.delay(50 + index * 30).duration(400)}
       style={styles.skillTag}
     >
       <Text style={styles.skillText}>
@@ -305,7 +302,7 @@ const ProfileScreen: React.FC = () => {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <Animated.View 
-          entering={FadeInDown.delay(100).duration(800)}
+          entering={FadeInDown.delay(50).duration(500)}
           style={styles.header}
         >
           <TouchableOpacity 
@@ -349,7 +346,7 @@ const ProfileScreen: React.FC = () => {
 
         {/* Profile Avatar and Basic Info */}
         <Animated.View 
-          entering={FadeInUp.delay(200).duration(1000)}
+          entering={FadeInUp.delay(100).duration(600)}
           style={styles.profileSection}
         >
           <View style={styles.avatarContainer}>
@@ -396,7 +393,7 @@ const ProfileScreen: React.FC = () => {
 
         {/* Contact Information */}
         <Animated.View 
-          entering={SlideInLeft.delay(600).duration(800)}
+          entering={SlideInLeft.delay(150).duration(500)}
           style={styles.section}
         >
           <Text style={styles.sectionTitle}>Contact Information</Text>
@@ -433,7 +430,7 @@ const ProfileScreen: React.FC = () => {
 
         {/* Bio Section */}
         <Animated.View 
-          entering={SlideInRight.delay(700).duration(800)}
+          entering={SlideInRight.delay(200).duration(500)}
           style={styles.section}
         >
           <Text style={styles.sectionTitle}>About</Text>
@@ -458,7 +455,7 @@ const ProfileScreen: React.FC = () => {
 
         {/* Skills & Tech Stack */}
         <Animated.View 
-          entering={FadeInUp.delay(800).duration(800)}
+          entering={FadeInUp.delay(250).duration(500)}
           style={styles.section}
         >
           <Text style={styles.sectionTitle}>Skills & Tech Stack</Text>
@@ -534,20 +531,21 @@ const styles = StyleSheet.create({
   floatingOrb: {
     position: 'absolute',
     borderRadius: 500,
-    backgroundColor: 'rgba(0, 216, 255, 0.1)',
+    backgroundColor: 'rgba(34, 211, 238, 0.03)',
+    opacity: 0.8,
   },
   orb1: {
-    width: 150,
-    height: 150,
-    top: 100,
-    right: -50,
+    width: 120,
+    height: 120,
+    top: 80,
+    right: -40,
   },
   orb2: {
-    width: 200,
-    height: 200,
-    bottom: 200,
-    left: -80,
-    backgroundColor: 'rgba(34, 211, 238, 0.08)',
+    width: 160,
+    height: 160,
+    bottom: 150,
+    left: -60,
+    backgroundColor: 'rgba(34, 211, 238, 0.02)',
   },
   header: {
     flexDirection: 'row',

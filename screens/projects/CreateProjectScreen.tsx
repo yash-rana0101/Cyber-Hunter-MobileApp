@@ -20,28 +20,57 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import SimpleMultiSelect from '../../components/ui/SimpleMultiSelect';
+import { useMultiSelect } from '../../hooks/useMultiSelect';
+import { filterService } from '../../services/filters';
 
 const CreateProjectScreen: React.FC = () => {
-  
+
   // State
   const [projectData, setProjectData] = useState({
     projectName: '',
     projectDescription: '',
     gitHubLink: '',
     liveLink: '',
-    techStack: [] as string[],
-    language: [] as string[],
-    tagId: [] as string[],
   });
-  
+
   const [projectImages, setProjectImages] = useState<string[]>([]);
   const [thumbnailImage, setThumbnailImage] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  
-  // Input states for dynamic adding
-  const [currentTech, setCurrentTech] = useState('');
-  const [currentLanguage, setCurrentLanguage] = useState('');
-  const [currentTag, setCurrentTag] = useState('');
+
+  // Multi-select hooks
+  const techStackFilter = useMultiSelect({
+    maxSelections: 10,
+    onCreateApi: async (label) => {
+      const newItem = await filterService.createTechStack(label);
+      return {
+        id: newItem.id,
+        label: newItem.content
+      };
+    },
+  });
+
+  const languageFilter = useMultiSelect({
+    maxSelections: 5,
+    onCreateApi: async (label) => {
+      const newItem = await filterService.createLanguage(label);
+      return {
+        id: newItem.id,
+        label: newItem.content
+      };
+    },
+  });
+
+  const tagFilter = useMultiSelect({
+    maxSelections: 10,
+    onCreateApi: async (label) => {
+      const newItem = await filterService.createTag(label);
+      return {
+        id: newItem.id,
+        label: newItem.content
+      };
+    },
+  });
 
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -72,62 +101,6 @@ const CreateProjectScreen: React.FC = () => {
   // Update field
   const updateField = (field: string, value: string) => {
     setProjectData(prev => ({ ...prev, [field]: value }));
-  };
-
-  // Add functions
-  const addTechStack = () => {
-    if (currentTech.trim() && !projectData.techStack.includes(currentTech.trim())) {
-      setProjectData(prev => ({
-        ...prev,
-        techStack: [...prev.techStack, currentTech.trim()]
-      }));
-      setCurrentTech('');
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  };
-
-  const addLanguage = () => {
-    if (currentLanguage.trim() && !projectData.language.includes(currentLanguage.trim())) {
-      setProjectData(prev => ({
-        ...prev,
-        language: [...prev.language, currentLanguage.trim()]
-      }));
-      setCurrentLanguage('');
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  };
-
-  const addTag = () => {
-    if (currentTag.trim() && !projectData.tagId.includes(currentTag.trim())) {
-      setProjectData(prev => ({
-        ...prev,
-        tagId: [...prev.tagId, currentTag.trim()]
-      }));
-      setCurrentTag('');
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  };
-
-  // Remove functions
-  const removeTechStack = (index: number) => {
-    setProjectData(prev => ({
-      ...prev,
-      techStack: prev.techStack.filter((_, i) => i !== index)
-    }));
-  };
-
-  const removeLanguage = (index: number) => {
-    setProjectData(prev => ({
-      ...prev,
-      language: prev.language.filter((_, i) => i !== index)
-    }));
-  };
-
-  const removeTag = (index: number) => {
-    setProjectData(prev => ({
-      ...prev,
-      tagId: prev.tagId.filter((_, i) => i !== index)
-    }));
   };
 
   // Image functions
@@ -208,7 +181,7 @@ const CreateProjectScreen: React.FC = () => {
 
       // Create FormData
       const formData = new FormData();
-      
+
       // Add text fields
       formData.append('projectName', projectData.projectName.trim());
       formData.append('projectDescription', projectData.projectDescription.trim());
@@ -216,11 +189,11 @@ const CreateProjectScreen: React.FC = () => {
       if (projectData.liveLink.trim()) {
         formData.append('liveLink', projectData.liveLink.trim());
       }
-      
-      // Add arrays as JSON strings (adjust based on your backend)
-      formData.append('techStack', JSON.stringify(projectData.techStack));
-      formData.append('language', JSON.stringify(projectData.language));
-      formData.append('tagId', JSON.stringify(projectData.tagId));
+
+      // Add arrays as JSON strings (using IDs from selected options)
+      formData.append('techStack', JSON.stringify(techStackFilter.value.map(item => item.id)));
+      formData.append('language', JSON.stringify(languageFilter.value.map(item => item.id)));
+      formData.append('tagId', JSON.stringify(tagFilter.value.map(item => item.id)));
 
       // Add thumbnail
       formData.append('projectThumbnail', {
@@ -239,7 +212,7 @@ const CreateProjectScreen: React.FC = () => {
       });
 
       await projectService.createProject(formData);
-      
+
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', 'Project created successfully!', [
         {
@@ -273,7 +246,7 @@ const CreateProjectScreen: React.FC = () => {
     multiline = false,
     keyboardType: any = 'default'
   ) => (
-    <Animated.View 
+    <Animated.View
       style={[
         styles.inputContainer,
         {
@@ -298,58 +271,8 @@ const CreateProjectScreen: React.FC = () => {
     </Animated.View>
   );
 
-  const renderTagInput = (
-    label: string,
-    items: string[],
-    currentValue: string,
-    setCurrentValue: (value: string) => void,
-    addFunction: () => void,
-    removeFunction: (index: number) => void,
-    placeholder: string
-  ) => (
-    <Animated.View 
-      style={[
-        styles.inputContainer,
-        {
-          transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-          opacity: fadeAnim,
-        }
-      ]}
-    >
-      <Text style={styles.inputLabel}>{label}</Text>
-      <View style={styles.tagInputWrapper}>
-        <TextInput
-          style={styles.tagInput}
-          value={currentValue}
-          onChangeText={setCurrentValue}
-          placeholder={placeholder}
-          placeholderTextColor="#9CA3AF"
-          onSubmitEditing={addFunction}
-          returnKeyType="done"
-        />
-        <TouchableOpacity style={styles.addButton} onPress={addFunction}>
-          <Ionicons name="add" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-      {items.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {items.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.tag}
-              onPress={() => removeFunction(index)}
-            >
-              <Text style={styles.tagText}>{item}</Text>
-              <Ionicons name="close" size={16} color="#22d3ee" />
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-    </Animated.View>
-  );
-
   const renderImagePicker = () => (
-    <Animated.View 
+    <Animated.View
       style={[
         styles.inputContainer,
         {
@@ -359,7 +282,7 @@ const CreateProjectScreen: React.FC = () => {
       ]}
     >
       <Text style={styles.inputLabel}>Project Images</Text>
-      
+
       {/* Thumbnail */}
       <Text style={styles.subLabel}>Thumbnail *</Text>
       <TouchableOpacity style={styles.imagePicker} onPress={pickThumbnail}>
@@ -402,18 +325,18 @@ const CreateProjectScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
       {renderFloatingOrbs()}
-      
-      <KeyboardAvoidingView 
+
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
           {/* Header */}
-          <Animated.View 
+          <Animated.View
             style={[
               styles.header,
               {
@@ -422,7 +345,7 @@ const CreateProjectScreen: React.FC = () => {
               }
             ]}
           >
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.backButton}
               onPress={() => router.back()}
             >
@@ -468,40 +391,100 @@ const CreateProjectScreen: React.FC = () => {
             'url'
           )}
 
-          {renderTagInput(
-            'Tech Stack',
-            projectData.techStack,
-            currentTech,
-            setCurrentTech,
-            addTechStack,
-            removeTechStack,
-            'e.g., React, Node.js'
-          )}
+          {/* Tech Stack Selection */}
+          <Animated.View
+            style={[
+              styles.inputContainer,
+              {
+                transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+                opacity: fadeAnim,
+              }
+            ]}
+          >
+            <SimpleMultiSelect
+              label="Tech Stack"
+              value={techStackFilter.value}
+              onChange={techStackFilter.setValue}
+              placeholder="Select technologies (e.g., React, Node.js)"
+              allowCreate={true}
+              onCreate={techStackFilter.props.onCreate}
+              onSearch={async (query) => {
+                const results = await filterService.getTechStacks(query);
+                return results.map(item => ({
+                  id: item.id,
+                  label: item.content
+                }));
+              }}
+              maxSelections={10}
+              loading={techStackFilter.creating}
+              style={styles.multiSelectStyle}
+            />
+          </Animated.View>
 
-          {renderTagInput(
-            'Languages',
-            projectData.language,
-            currentLanguage,
-            setCurrentLanguage,
-            addLanguage,
-            removeLanguage,
-            'e.g., JavaScript, Python'
-          )}
+          {/* Languages Selection */}
+          <Animated.View
+            style={[
+              styles.inputContainer,
+              {
+                transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+                opacity: fadeAnim,
+              }
+            ]}
+          >
+            <SimpleMultiSelect
+              label="Programming Languages"
+              value={languageFilter.value}
+              onChange={languageFilter.setValue}
+              placeholder="Select languages (e.g., JavaScript, Python)"
+              allowCreate={true}
+              onCreate={languageFilter.props.onCreate}
+              onSearch={async (query) => {
+                const results = await filterService.getLanguages(query);
+                return results.map(item => ({
+                  id: item.id,
+                  label: item.content
+                }));
+              }}
+              maxSelections={5}
+              loading={languageFilter.creating}
+              style={styles.multiSelectStyle}
+            />
+          </Animated.View>
 
-          {renderTagInput(
-            'Tags',
-            projectData.tagId,
-            currentTag,
-            setCurrentTag,
-            addTag,
-            removeTag,
-            'e.g., Web App, Mobile'
-          )}
+          {/* Tags Selection */}
+          <Animated.View
+            style={[
+              styles.inputContainer,
+              {
+                transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+                opacity: fadeAnim,
+              }
+            ]}
+          >
+            <SimpleMultiSelect
+              label="Tags"
+              value={tagFilter.value}
+              onChange={tagFilter.setValue}
+              placeholder="Add tags (e.g., Web App, Mobile)"
+              allowCreate={true}
+              onCreate={tagFilter.props.onCreate}
+              onSearch={async (query) => {
+                const results = await filterService.getTags(query);
+                return results.map(item => ({
+                  id: item.id,
+                  label: item.content
+                }));
+              }}
+              maxSelections={10}
+              loading={tagFilter.creating}
+              style={styles.multiSelectStyle}
+            />
+          </Animated.View>
 
           {renderImagePicker()}
 
           {/* Submit Button */}
-          <Animated.View 
+          <Animated.View
             style={[
               styles.submitContainer,
               {
@@ -604,6 +587,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     marginBottom: 24,
+    zIndex: 1,
   },
   inputLabel: {
     fontSize: 16,
@@ -619,7 +603,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   inputWrapper: {
-    backgroundColor: 'rgba(31, 41, 55, 0.8)',
+    backgroundColor: '#000000',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(55, 65, 81, 0.5)',
@@ -634,48 +618,9 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  tagInputWrapper: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(31, 41, 55, 0.8)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(55, 65, 81, 0.5)',
-  },
-  tagInput: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  addButton: {
-    width: 44,
-    height: 44,
-    backgroundColor: '#22d3ee',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    margin: 2,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 12,
-    gap: 8,
-  },
-  tag: {
-    backgroundColor: 'rgba(34, 211, 238, 0.2)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  tagText: {
-    color: '#22d3ee',
-    fontSize: 14,
-    fontWeight: '500',
+  multiSelectStyle: {
+    marginBottom: 12,
+    zIndex: 99,
   },
   imagePicker: {
     backgroundColor: 'rgba(31, 41, 55, 0.8)',

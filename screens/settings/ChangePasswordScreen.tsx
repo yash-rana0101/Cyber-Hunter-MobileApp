@@ -254,7 +254,7 @@ const ChangePasswordScreen: React.FC = () => {
                 styles.matchText,
                 { color: passwordsMatch ? '#10B981' : '#EF4444' }
               ]}>
-                {passwordsMatch ? 'Passwords match' : 'Passwords do not match'}
+                {passwordsMatch ? 'Password matched' : 'Passwords do not match'}
               </Text>
             </View>
           )}

@@ -1,3 +1,4 @@
+import { useMultiSelect } from '@/hooks/useMultiSelect';
 import { projectService } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -21,17 +22,17 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import MultiSelectInput from '../../components/ui/MultiSelectInput';
-import { FilterOption } from '../../services/filters';
+import SimpleMultiSelect, { SelectOption } from '../../components/ui/SimpleMultiSelect';
+import { filterService } from '../../services/filters';
 
 interface ProjectData {
   projectName: string;
   projectDescription: string;
   gitHubLink: string;
   liveLink: string;
-  techStack: FilterOption[];
-  language: FilterOption[];
-  tagId: FilterOption[];
+  techStack: SelectOption[];
+  language: SelectOption[];
+  tagId: SelectOption[];
 }
 
 const EditProjectScreen: React.FC = () => {
@@ -45,11 +46,49 @@ const EditProjectScreen: React.FC = () => {
     language: [],
     tagId: [],
   });
-  
+
   const [projectImages, setProjectImages] = useState<string[]>([]);
   const [thumbnailImage, setThumbnailImage] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const initialValuesSet = useRef(false);
+
+  // Multi-select hooks
+  const techStackSelect = useMultiSelect({
+    maxSelections: 10,
+    onCreateApi: async (content: string) => {
+      const result = await filterService.createTechStack(content);
+      return { id: result.id, label: result.content };
+    },
+    onSearchApi: async (query: string) => {
+      const result = await filterService.getTechStacks(query);
+      return result;
+    },
+  });
+
+  const languageSelect = useMultiSelect({
+    maxSelections: 10,
+    onCreateApi: async (content: string) => {
+      const result = await filterService.createLanguage(content);
+      return { id: result.id, label: result.content };
+    },
+    onSearchApi: async (query: string) => {
+      const result = await filterService.getLanguages(query);
+      return result;
+    },
+  });
+
+  const tagSelect = useMultiSelect({
+    maxSelections: 10,
+    onCreateApi: async (content: string) => {
+      const result = await filterService.createTag(content);
+      return { id: result.id, label: result.content };
+    },
+    onSearchApi: async (query: string) => {
+      const result = await filterService.getTags(query);
+      return result;
+    },
+  });
 
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -60,7 +99,7 @@ const EditProjectScreen: React.FC = () => {
       try {
         setInitialLoading(true);
         const response = await projectService.getProjectById(projectId as string);
-        
+
         if (response.project) {
           const project = response.project;
           setProjectData({
@@ -68,19 +107,21 @@ const EditProjectScreen: React.FC = () => {
             projectDescription: project.projectDescription || '',
             gitHubLink: project.gitHubLink,
             liveLink: project.liveLink || '',
-            techStack: project.techStack.map((tech: any, index: number) => ({
-              id: tech.id || index.toString(),
-              content: tech.content || tech
+            // Transform arrays to match reference code pattern
+            techStack: (project.techStack || []).map((tech: any) => ({
+              id: tech.id || tech._id || tech.tagId || tech,
+              label: tech.content || tech.name || tech
             })),
-            language: project.language.map((lang: any, index: number) => ({
-              id: lang.id || index.toString(),
-              content: lang.content || lang
+            language: (project.language || []).map((lang: any) => ({
+              id: lang.id || lang._id || lang.tagId || lang,
+              label: lang.content || lang.name || lang
             })),
-            tagId: project.tagId.map((tag: any, index: number) => ({
-              id: tag.id || index.toString(),
-              content: tag.content || tag
+            tagId: (project.tagId || []).map((tag: any) => ({
+              id: tag.id || tag._id || tag.tagId || tag,
+              label: tag.content || tag.name || tag
             })),
           });
+
           setThumbnailImage(project.projectThumbnail);
           setProjectImages(project.projectImage || []);
         }
@@ -96,7 +137,7 @@ const EditProjectScreen: React.FC = () => {
     if (projectId) {
       loadProject();
     }
-    
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -110,6 +151,16 @@ const EditProjectScreen: React.FC = () => {
       }),
     ]).start();
   }, [projectId, fadeAnim, slideAnim]);
+
+  // Separate effect to set initial values for multi-select hooks
+  useEffect(() => {
+    if (!initialValuesSet.current && (projectData.techStack.length > 0 || projectData.language.length > 0 || projectData.tagId.length > 0)) {
+      techStackSelect.setValue(projectData.techStack);
+      languageSelect.setValue(projectData.language);
+      tagSelect.setValue(projectData.tagId);
+      initialValuesSet.current = true;
+    }
+  }, [projectData.techStack, projectData.language, projectData.tagId, techStackSelect, languageSelect, tagSelect]);
 
   const updateField = (field: keyof ProjectData, value: string) => {
     setProjectData(prev => ({ ...prev, [field]: value }));
@@ -169,17 +220,22 @@ const EditProjectScreen: React.FC = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       const formData = new FormData();
-      
+
       // Add text fields
       formData.append('projectName', projectData.projectName);
       formData.append('projectDescription', projectData.projectDescription);
       formData.append('gitHubLink', projectData.gitHubLink);
       formData.append('liveLink', projectData.liveLink);
-      
-      // Add arrays as JSON strings
-      formData.append('techStack', JSON.stringify(projectData.techStack));
-      formData.append('language', JSON.stringify(projectData.language));
-      formData.append('tagId', JSON.stringify(projectData.tagId));
+
+      // Add arrays as ID arrays - following reference code pattern
+      // Extract IDs only for backend, similar to how reference code maps t.tagId, l.tagId
+      const techStackIds = techStackSelect.value.map((item: SelectOption) => item.id);
+      const languageIds = languageSelect.value.map((item: SelectOption) => item.id);
+      const tagIds = tagSelect.value.map((item: SelectOption) => item.id);
+
+      formData.append('techStack', JSON.stringify(techStackIds));
+      formData.append('language', JSON.stringify(languageIds));
+      formData.append('tagId', JSON.stringify(tagIds));
 
       // Add thumbnail only if it's changed (not the original URL)
       if (thumbnailImage && !thumbnailImage.startsWith('http')) {
@@ -201,9 +257,9 @@ const EditProjectScreen: React.FC = () => {
       });
 
       await projectService.updateProject(projectId as string, formData);
-      
+
       Alert.alert(
-        'Success', 
+        'Success',
         'Project updated successfully!',
         [{ text: 'OK', onPress: () => router.back() }]
       );
@@ -249,88 +305,27 @@ const EditProjectScreen: React.FC = () => {
 
   const renderMultiSelectField = (
     label: string,
-    selectedValues: FilterOption[],
-    onSelectionChange: (selected: FilterOption[]) => void,
-    placeholder: string
+    multiSelectHook: any,
+    placeholder: string,
+    zIndex: number = 1000
   ) => {
-    // Common predefined options for each field
-    const getOptionsForField = (fieldLabel: string): FilterOption[] => {
-      switch (fieldLabel) {
-        case 'Tech Stack':
-          return [
-            { id: '1', content: 'React' },
-            { id: '2', content: 'Node.js' },
-            { id: '3', content: 'Express' },
-            { id: '4', content: 'MongoDB' },
-            { id: '5', content: 'PostgreSQL' },
-            { id: '6', content: 'TypeScript' },
-            { id: '7', content: 'Next.js' },
-            { id: '8', content: 'React Native' },
-            { id: '9', content: 'Docker' },
-            { id: '10', content: 'AWS' },
-          ];
-        case 'Languages':
-          return [
-            { id: '1', content: 'JavaScript' },
-            { id: '2', content: 'TypeScript' },
-            { id: '3', content: 'Python' },
-            { id: '4', content: 'Java' },
-            { id: '5', content: 'C++' },
-            { id: '6', content: 'Swift' },
-            { id: '7', content: 'Kotlin' },
-            { id: '8', content: 'Go' },
-            { id: '9', content: 'Rust' },
-            { id: '10', content: 'PHP' },
-          ];
-        case 'Tags':
-          return [
-            { id: '1', content: 'Web App' },
-            { id: '2', content: 'Mobile App' },
-            { id: '3', content: 'API' },
-            { id: '4', content: 'Full Stack' },
-            { id: '5', content: 'Frontend' },
-            { id: '6', content: 'Backend' },
-            { id: '7', content: 'Machine Learning' },
-            { id: '8', content: 'AI' },
-            { id: '9', content: 'Game' },
-            { id: '10', content: 'Tool' },
-          ];
-        default:
-          return [];
-      }
-    };
-
-    const handleCreateNew = async (inputValue: string): Promise<FilterOption> => {
-      // Create a new option when user types something not in the list
-      return {
-        id: Date.now().toString(),
-        content: inputValue,
-      };
-    };
-
     return (
-      <Animated.View style={[styles.inputContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-        <Text style={styles.inputLabel}>{label}</Text>
-        <MultiSelectInput
-          fieldName={label}
+      <Animated.View style={[styles.inputContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }], zIndex }]}>
+        <SimpleMultiSelect
+          {...multiSelectHook.props}
+          label={label}
           placeholder={placeholder}
-          options={getOptionsForField(label)}
-          selectedValues={selectedValues}
-          onSelectionChange={onSelectionChange}
-          onCreateNew={handleCreateNew}
-          searchable={true}
-          creatable={true}
-          maxSelections={10}
-          containerStyle={styles.multiSelectContainer}
+          theme="dark"
+          style={[styles.multiSelectContainer, { zIndex: zIndex + 1 }]}
         />
       </Animated.View>
     );
   };
 
   const renderImagePicker = () => (
-    <Animated.View style={[styles.inputContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+    <Animated.View style={[styles.inputContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }], zIndex: 1 }]}>
       <Text style={styles.inputLabel}>Project Images</Text>
-      
+
       {/* Thumbnail */}
       <Text style={styles.subLabel}>Thumbnail (Required)</Text>
       <TouchableOpacity style={styles.imagePicker} onPress={pickThumbnail}>
@@ -386,12 +381,12 @@ const EditProjectScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
       {renderFloatingOrbs()}
-      
-      <KeyboardAvoidingView 
+
+      <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -441,23 +436,23 @@ const EditProjectScreen: React.FC = () => {
 
           {renderMultiSelectField(
             'Tech Stack',
-            projectData.techStack,
-            (selected) => setProjectData(prev => ({ ...prev, techStack: selected })),
-            'React, Node.js, etc.'
+            techStackSelect,
+            'Search tech stack (e.g., React, Node.js)',
+            1003
           )}
 
           {renderMultiSelectField(
             'Languages',
-            projectData.language,
-            (selected) => setProjectData(prev => ({ ...prev, language: selected })),
-            'JavaScript, Python, etc.'
+            languageSelect,
+            'Search languages (e.g., JavaScript, Python)',
+            1002
           )}
 
           {renderMultiSelectField(
             'Tags',
-            projectData.tagId,
-            (selected) => setProjectData(prev => ({ ...prev, tagId: selected })),
-            'Web App, Mobile, etc.'
+            tagSelect,
+            'Search tags (e.g., Web App, Mobile)',
+            1001
           )}
 
           {renderImagePicker()}
@@ -496,20 +491,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-    overflow: 'visible',
   },
   keyboardAvoidingView: {
     flex: 1,
-    overflow: 'visible',
   },
   scrollView: {
     flex: 1,
-    overflow: 'visible',
   },
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 40,
-    overflow: 'visible',
   },
   loadingContainer: {
     flex: 1,
@@ -522,8 +513,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   multiSelectContainer: {
-    zIndex: 999999,
     marginBottom: 8,
+    position: 'relative',
   },
   floatingOrb: {
     position: 'absolute',
@@ -568,8 +559,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     marginBottom: 20,
-    zIndex: 999998,
-    overflow: 'visible',
+    position: 'relative',
   },
   inputLabel: {
     fontSize: 16,
@@ -669,7 +659,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   submitText: {
-    color: '#FFFFFF',
+    color: '#000000',
     fontSize: 18,
     fontWeight: '600',
   },

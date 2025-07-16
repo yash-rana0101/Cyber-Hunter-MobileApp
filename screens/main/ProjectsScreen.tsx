@@ -683,6 +683,7 @@ const styles = StyleSheet.create({
   projectsContainer: {
     gap: 16,
     paddingBottom: 20,
+    marginBottom: 60,
   },
   projectCard: {
     borderRadius: 16,

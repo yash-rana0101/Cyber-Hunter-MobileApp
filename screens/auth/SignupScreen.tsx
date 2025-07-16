@@ -60,7 +60,8 @@ export default function SignupScreen() {
       });
 
       await signIn(response.data.data);
-      router.replace('/(tabs)');
+      // Navigate to UserDetailsScreen after successful signup
+      router.replace('/auth/user-details');
     } catch (error: any) {
       Toast.show({
         type: 'error',
@@ -84,7 +85,8 @@ export default function SignupScreen() {
         const code = url.searchParams.get('code');
         const response = await axios.get(`${API_URL}/api/v1/auth/google?code=${code}`);
         await signIn(response.data.data);
-        router.replace('/(tabs)');
+        // Navigate to UserDetailsScreen after successful Google signup
+        router.replace('/auth/user-details');
       }
     } catch (error) {
       console.error('Google signup error:', error);
